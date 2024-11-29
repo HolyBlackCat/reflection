@@ -1,0 +1,30 @@
+EM_REFL(
+    ACTION1 ACTION2 ACTION3
+    (type)(value)
+    (type)(value,init...)
+)
+
+
+actions are:
+    (,func1,func2,...)
+    Use empty first arg and remaining nonempty to detect them
+
+actions:
+    METADATA_ONLY
+        changes the form to (value)(value) for the rest of the macro
+            by setting a special bit that's processed before everything else
+            (perhaps there's a field for a "current preprocessing macro" for the list?, rather than a bit)
+
+    NO_DETECT_THIS_BASE
+        removes the base detection target
+        no effect if in metadata-only mode
+
+
+
+EM_REFL:
+    1. splits the input list to actions and data
+        actions must always be before data
+    2. actions run their loops
+
+must have some underlying EM_REFL_LOW with more implicit actions:
+    the final actions are "generate base detection target", "generate fields", etc
