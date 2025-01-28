@@ -1,6 +1,7 @@
 #pragma once
 
-#include "em/meta/qualifiers.h"
+#include "em/meta/cvref.h"
+#include "em/meta/lists.h"
 
 #include <concepts>
 
@@ -17,6 +18,16 @@ namespace em::Refl
     // Valid attribute types.
     template <typename T>
     concept Attribute = AttributeOrBase<T> && std::default_initializable<T>;
+
+    // Describes a struct member type and a list of attributes associated with it.
+    // When customizing this, pass `Type = void` to avoid overriding the type (to use `decltype(...)` on the getter as by default).
+    // You don't have to use this for customization, you can just copy the member names.
+    template <typename Type, Attribute ...Attrs>
+    struct MemberInfo
+    {
+        using type = Type; // Optional, if not specified we guess the type from the getter.
+        using attrs = Meta::TypeList<Attrs...>; // Optional, if not specified we assume no attributes. You can use any variadic template for the type list.
+    };
 
     namespace detail
     {

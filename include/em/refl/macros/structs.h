@@ -1,7 +1,7 @@
 #pragma once
 
 // Macros to declare reflected structs and struct members.
-// The templates to read the reflection metadata are elsewhere, in `refl/api/struct.h`.
+// The templates to read the reflection metadata are elsewhere, in `refl/api/structs.h`.
 
 #include "em/macros/meta/comma.h"
 #include "em/macros/meta/common.h"
@@ -11,9 +11,9 @@
 #include "em/macros/meta/ranges.h"
 #include "em/macros/meta/sequence_for.h"
 #include "em/macros/utils/forward.h"
+#include "em/meta/cvref.h"
 #include "em/meta/lists.h"
 #include "em/meta/packs.h"
-#include "em/meta/qualifiers.h"
 #include "em/meta/stateful/list.h"
 #include "em/meta/tags.h"
 #include "em/refl/common.h"
@@ -21,23 +21,14 @@
 #include <concepts>
 
 
-namespace em::Refl
+namespace em::Refl::Structs
 {
-    namespace detail
+    namespace detail::Macros
     {
         // Given a `type, attributes...` list (as accepted by `EM_REFL`), returns the `type` from it.
         template <typename Type, Attribute ...Attrs>
         using MemberType = Type;
     }
-
-    // Describes a struct member type and a list of attributes associated with it.
-    // When customizing this, pass `Type = void` to avoid overriding the type (to use `decltype(...)` on the getter as by default).
-    template <typename Type, Attribute ...Attrs>
-    struct MemberInfo
-    {
-        using type = Type;
-        using attrs = Meta::TypeList<Attrs...>;
-    };
 }
 
 // Access modifiers for `EM_REFL(...)`.
@@ -54,7 +45,7 @@ namespace em::Refl
  *         EM_REFL(
  *             (type)(name)               // Basic declaration, the initializer defaults to `{}`.
  *         EM_PUBLIC                      // Access modifiers.
- *             (type)(name, init)         // With initializer.
+ *             (type)(name, 42)           // With initializer.
  *             (type, attr1, attr2)(name) // With attributes. Those are types derived from `em::Refl::BasicAttribute`. The initializer is allowed here too of course.
  *         )
  *     }
@@ -83,7 +74,7 @@ namespace em::Refl
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B_END
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL)(p_type_attrs_, __VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL(p_type_attrs_, .../*name_ [,init_...]*/) ::em::Refl::detail::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_INITIALIZER(__VA_ARGS__))({});
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL(p_type_attrs_, .../*name_ [,init_...]*/) ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_INITIALIZER(__VA_ARGS__))({});
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM(p_type_attrs_, category_, data_, .../*text_*/) __VA_ARGS__
 #define DETAIL_EM_REFL_INITIALIZER(unused_, ...) __VA_OPT__(= __VA_ARGS__)
 
@@ -100,28 +91,29 @@ namespace em::Refl
     /* Detect this as a base class. */\
     EM_DETECTABLE_BASE((::em::Refl::detail::StructBasesTag), (_em_refl_Self)) \
     \
-    /* In all those functions we're currently using `same_ignoring_cvref<Self>` to reject derived types. */\
-    /* This sounds like a sensible behavior, but if we ever decide to change it, simply accepting a reference to `_em_refl_Self` should work. */\
-    /* Except for `_adl_em_refl_GetMember`, which needs perfect forwarding (would probably have to pass the qualifiers separately). */\
-    \
-    /* Member count. */\
-    [[nodiscard]] friend constexpr int _adl_em_refl_NumMembers(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) \
+    struct _em_refl_Traits \
     { \
-        return EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
-    } \
-    /* A getter for the members. */\
-    template <int _em_I> \
-    [[nodiscard]] friend constexpr auto &&_adl_em_refl_GetMember(int/*AdlDummy*/, ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto &&_em_self) \
-    { \
-        DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq_) \
-        static_assert(::em::Meta::always_false<decltype(_em_self), ::em::Meta::ValueTag<_em_I>>, "Member index is out of range."); \
-    } \
-    /* Return a `TypeList` of lists of member attributes. */\
-    template <int _em_I> \
-    [[nodiscard]] friend constexpr auto _adl_em_refl_GetMemberInfo(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) \
-    { \
-        return ::em::Meta::list_type_at<::em::Meta::TypeList<EM_REMOVE_LEADING_COMMA(EM_END(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A seq_))>, _em_I>{}; \
-    }
+        /* Member count. This is a fan */\
+        static constexpr int num_members = 0 EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
+        /* A getter for the members. */\
+        template <int _em_I> \
+        [[nodiscard]] static constexpr auto &&GetMember(auto &&_em_self) \
+        { \
+            DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq_) \
+            static_assert(::em::Meta::always_false<decltype(_em_self), ::em::Meta::ValueTag<_em_I>>, "Member index is out of range."); \
+        } \
+        /* [optional] Return something with `::type` to indicate a member type (omit or `void` to guess),
+        // and with `::attrs` with a type list of attributes (the list can be any variadic template, omit if no attributes). */\
+        template <int _em_I> \
+        [[nodiscard]] static constexpr auto GetMemberInfo() \
+        { \
+            return ::em::Meta::list_type_at<::em::Meta::TypeList<EM_REMOVE_LEADING_COMMA(EM_END(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A seq_))>, _em_I>{}; \
+        } \
+    }; \
+    /* We're currently using `same_ignoring_cvref<Self>` to reject derived types. */\
+    /* Replacing this with `_em_refl_Self` would allow derived types, but that seems to be worse. */\
+    friend constexpr _em_refl_Traits _adl_em_refl_StructMacro(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) {return {};}
+
 // A loop to count the members.
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A
