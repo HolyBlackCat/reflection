@@ -9,12 +9,12 @@ class A
     )
 };
 
-static_assert(em::Refl::Structs::Type<A>);
-static_assert(!em::Refl::Structs::Type<const A>);
+static_assert(em::Refl::Structs::TypeUnqualified<A>);
+static_assert(!em::Refl::Structs::TypeUnqualified<const A>);
+static_assert(!em::Refl::Structs::TypeUnqualified<int>);
+static_assert(em::Refl::Structs::Type<const A>);
+static_assert(em::Refl::Structs::Type<const volatile A &&>);
 static_assert(!em::Refl::Structs::Type<int>);
-static_assert(em::Refl::Structs::TypeMaybeCvref<const A>);
-static_assert(em::Refl::Structs::TypeMaybeCvref<const volatile A &&>);
-static_assert(!em::Refl::Structs::TypeMaybeCvref<int>);
 
 static_assert(em::Refl::Structs::num_members<A> == 2);
 static_assert(em::Refl::Structs::num_members<const volatile A &&> == 2);
@@ -31,6 +31,11 @@ static_assert(std::is_same_v<decltype(em::Refl::Structs::GetMemberMutable<1>(std
 
 static_assert(std::is_same_v<em::Refl::Structs::MemberType<A, 0>, int>);
 static_assert(std::is_same_v<em::Refl::Structs::MemberType<const volatile A &&, 1>, float>);
+
+static_assert(em::Refl::Structs::HasMemberNames<A>);
+static_assert(em::Refl::Structs::HasMemberNames<const volatile A &&>);
+static_assert(em::Refl::Structs::GetMemberName<A>(0) == "x");
+static_assert(em::Refl::Structs::GetMemberName<const volatile A &&>(1) == "y");
 
 struct A1 : em::Refl::BasicAttribute {};
 struct A2 : em::Refl::BasicAttribute {};
@@ -67,16 +72,17 @@ class Empty
 {
     EM_REFL()
 };
-static_assert(em::Refl::Structs::Type<Empty>);
+static_assert(em::Refl::Structs::TypeUnqualified<Empty>);
 static_assert(em::Refl::Structs::num_members<Empty> == 0);
 
 
 // Standard tuples!
+static_assert(em::Refl::Structs::TypeUnqualified<std::tuple<int, float &>>);
+static_assert(!em::Refl::Structs::TypeUnqualified<const std::tuple<int, float &>>);
 static_assert(em::Refl::Structs::Type<std::tuple<int, float &>>);
-static_assert(!em::Refl::Structs::Type<const std::tuple<int, float &>>);
-static_assert(em::Refl::Structs::TypeMaybeCvref<std::tuple<int, float &>>);
-static_assert(em::Refl::Structs::TypeMaybeCvref<const std::tuple<int, float &>>);
-static_assert(em::Refl::Structs::TypeMaybeCvref<const volatile std::tuple<int, float &> &&>);
+static_assert(em::Refl::Structs::Type<const std::tuple<int, float &>>);
+static_assert(em::Refl::Structs::Type<const volatile std::tuple<int, float &> &&>);
+static_assert(!em::Refl::Structs::HasMemberNames<std::tuple<int, float &>>);
 
 static_assert(em::Refl::Structs::num_members<std::tuple<int, float &>> == 2);
 

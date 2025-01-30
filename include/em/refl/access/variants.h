@@ -27,10 +27,10 @@ namespace em::Refl::Variants
      */
 
     template <typename T>
-    concept Type = Meta::cvref_unqualified<T> && requires{std::variant_size<T>::value;};
+    concept Type = requires{std::variant_size<std::remove_cvref_t<T>>::value;};
 
     template <typename T>
-    concept TypeMaybeCvref = Type<std::remove_cvref_t<T>>;
+    concept TypeUnqualified = Meta::cvref_unqualified<T> && Type<T>;
 
 
     namespace detail
@@ -44,6 +44,6 @@ namespace em::Refl::Variants
 
     // A `Meta::TypeList<...>` of the types in a variant.
     // This follows the variant protocol instead of directly looking at the template parameters, so it can work for your own types too.
-    template <TypeMaybeCvref T>
+    template <Type T>
     using Alternatives = typename detail::Alternatives<std::remove_cvref_t<T>, std::make_index_sequence<std::variant_size_v<std::remove_cvref_t<T>>>>::type;
 }

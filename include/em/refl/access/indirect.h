@@ -25,14 +25,14 @@ namespace em::Refl::Indirect
 
 
     template <typename T>
-    concept Type = Meta::cvref_unqualified<T> && requires{typename detail::Traits<T>;};
+    concept Type = requires{typename detail::Traits<std::remove_cvref_t<T>>;};
 
     template <typename T>
-    concept TypeMaybeCvref = Type<std::remove_cvref_t<T>>;
+    concept TypeUnqualified = Meta::cvref_unqualified<T> && Type<T>;
 
     // Does the object hold a value?
     // This will always return true if `AlwaysHasValue<T>` is true.
-    template <Meta::Deduce..., Type T>
+    template <Meta::Deduce..., TypeUnqualified T>
     [[nodiscard]] constexpr bool HasValue(const T &value)
     {
         return detail::Traits<T>::HasValue(value);
@@ -41,12 +41,12 @@ namespace em::Refl::Indirect
     // Will `HasValue()` always return true for this type?
     template <typename T>
     concept AlwaysHasValue =
-        TypeMaybeCvref<T> &&
+        Type<T> &&
         std::is_same_v<decltype(detail::Traits<T>::HasValue(std::declval<const std::remove_cvref_t<T> &>())), std::true_type>;
 
     // Get the value of an optional. This can perfect-forward.
     // This will usually return a reference, but I guess there's no reason why a customized optional can't return by value here.
-    template <Meta::Deduce..., TypeMaybeCvref T>
+    template <Meta::Deduce..., Type T>
     [[nodiscard]] constexpr decltype(auto) GetValue(T &&value)
     {
         return detail::Traits<T>::GetValue(std::forward<T>(value));

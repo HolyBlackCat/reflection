@@ -18,7 +18,9 @@
 #include "em/meta/tags.h"
 #include "em/refl/common.h"
 
+#include <array>
 #include <concepts>
+#include <string_view>
 
 
 namespace em::Refl::Structs
@@ -52,8 +54,7 @@ namespace em::Refl::Structs
  *
  * The default initializer is `{}`. Use `(name,)` to remove any initializer (e.g. if the type is not default-constructible).
  */
-#define EM_REFL(...) DETAIL_EM_REFL(EM_SEQ_GROUP2(__VA_ARGS__))
-#define DETAIL_EM_REFL(seq_) DETAIL_EM_REFL_EMIT_MEMBERS(seq_) DETAIL_EM_REFL_EMIT_METADATA(seq_)
+#define EM_REFL(...) DETAIL_EM_REFL(DETAIL_EM_REFL_SPLIT_LIST(__VA_ARGS__))
 
 // `EM_STRUCT(name_etc)(...)` is a shorthand for `struct name_etc {EM_REFL(...)};`. `name_etc` can contain bases, attributes, etc.
 #define EM_STRUCT(.../*name_etc*/) struct __VA_ARGS__ DETAIL_EM_STRUCT_BODY
@@ -61,11 +62,26 @@ namespace em::Refl::Structs
 #define EM_CLASS(.../*name_etc*/) class __VA_ARGS__ DETAIL_EM_STRUCT_BODY
 #define DETAIL_EM_STRUCT_BODY(...) { EM_REFL(__VA_ARGS__) };
 
+#define EM_UNNAMED_MEMBERS (,_em_unnamed_members)
+
 // For custom annotations in `EM_REFL(...)`.
 // `...` gets pasted into the class verbatim.
 // `category_` is a single-word ID that roughly explains what this is. `data_` can be anything.
 // `...`, if specified, is inserted literally into the class, inbetween the members.
 #define EM_VERBATIM_LOW(category_, data_, .../*verbatim*/) (_em_verbatim)(category_,data_,__VA_ARGS__)
+
+
+// --- Internals:
+
+// The implementaiton of `EM_REFL(...)`.
+#define DETAIL_EM_REFL(...) DETAIL_EM_REFL_2(__VA_ARGS__)
+#define DETAIL_EM_REFL_2(control_, seq_) DETAIL_EM_REFL_3(EM_IDENTITY DETAIL_EM_REFL_CONTROL(control_), EM_SEQ_GROUP2(seq_))
+#define DETAIL_EM_REFL_3(...) DETAIL_EM_REFL_4(__VA_ARGS__)
+#define DETAIL_EM_REFL_4(named_members_, /*add new control vars here*/ seq_) DETAIL_EM_REFL_EMIT_MEMBERS(seq_) DETAIL_EM_REFL_EMIT_METADATA(named_members_, seq_)
+
+#define DETAIL_EM_REFL_CONTROL(control_) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_CONTROL_STEP, SF_STATE, (1/*enable member names*/), control_)
+#define DETAIL_EM_REFL_CONTROL_STEP(n, d, unused_, command_, ...) EM_CALL(EM_CAT(DETAIL_EM_REFL_CONTROL_STEP_, command_), EM_IDENTITY d __VA_OPT__(,) __VA_ARGS__)
+#define DETAIL_EM_REFL_CONTROL_STEP__em_unnamed_members(x, ...) (EM_IF_01(x)(0)(EM_FAIL("Duplicate `EM_UNNAMED_MEMEBRS`")) __VA_OPT__(,) __VA_ARGS__)
 
 // Takes a member list (preprocessed with `EM_SEQ_GROUP2(...)`) and outputs the member declarations for it.
 #define DETAIL_EM_REFL_EMIT_MEMBERS(seq_) EM_END(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A seq_)
@@ -84,7 +100,8 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_IF_VERBATIM__em_verbatim ,
 
 // Generates metadata for a class. `seq_` is the list of members, preprocessed with `EM_SEQ_GROUP2(...)`.
-#define DETAIL_EM_REFL_EMIT_METADATA(seq_) \
+// `named_members_` is 0 or 1, whether to generate the member name information.
+#define DETAIL_EM_REFL_EMIT_METADATA(named_members_, seq_) \
     /* Typedef the enclosing class. */\
     EM_TYPEDEF_ENCLOSING_CLASS(_em_refl_Self) \
     \
@@ -97,7 +114,7 @@ namespace em::Refl::Structs
         static constexpr int num_members = 0 EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
         /* A getter for the members. */\
         template <int _em_I> \
-        [[nodiscard]] static constexpr auto &&GetMember(auto &&_em_self) \
+        static constexpr auto &&GetMember(auto &&_em_self) \
         { \
             DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq_) \
             static_assert(::em::Meta::always_false<decltype(_em_self), ::em::Meta::ValueTag<_em_I>>, "Member index is out of range."); \
@@ -105,14 +122,23 @@ namespace em::Refl::Structs
         /* [optional] Return something with `::type` to indicate a member type (omit or `void` to guess),
         // and with `::attrs` with a type list of attributes (the list can be any variadic template, omit if no attributes). */\
         template <int _em_I> \
-        [[nodiscard]] static constexpr auto GetMemberInfo() \
+        static constexpr auto GetMemberInfo() \
         { \
             return ::em::Meta::list_type_at<::em::Meta::TypeList<EM_REMOVE_LEADING_COMMA(EM_END(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A seq_))>, _em_I>{}; \
         } \
+        /* [optional] Return the member name. Omit the function to indicate the lack of names. */\
+        /* Currently the convention is to return null-terminated strings. The library itself doesn't use that for anything, but that's heavily recommended. */\
+        EM_IF_01(named_members_)( \
+            static constexpr ::std::string_view GetMemberName(int _em_i) \
+            { \
+                static constexpr ::std::array<::std::string_view, num_members> _em_array = { EM_END(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A seq_) }; \
+                return _em_array[_em_i]; \
+            } \
+        )() \
     }; \
     /* We're currently using `same_ignoring_cvref<Self>` to reject derived types. */\
     /* Replacing this with `_em_refl_Self` would allow derived types, but that seems to be worse. */\
-    friend constexpr _em_refl_Traits _adl_em_refl_StructMacro(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) {return {};}
+    friend constexpr _em_refl_Traits _adl_em_refl_Struct(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) {return {};}
 
 // A loop to count the members.
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B
@@ -123,14 +149,19 @@ namespace em::Refl::Structs
 // A loop to emit `if constexpr (i == counter) return member; else` for all members, to return references to them.
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP, SF_NULL, 0, seq)
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, p_type_attrs_, name_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)(counter_)(counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else)
-// A loop to emit a list of lists of member attributes. (The outer list has one element per member.)
+// A loop to emit a list of lists of member types and attributes.
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B_END
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)()(, ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>)
+// A loop to emit a list of lists of member names.
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A_END
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B_END
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(p_type_attrs_, name_, ...) #name_,
 
-/* // This isn't need for anything right now, but can help adding extra commands to `EM_REFL(...)` later.
 // Given a list `(,a)(,b)(,c)(d)(e)(f)`, inserts a comma to produce `(,a)(,b)(,c) , (d)(e)(f)`.
 // Either half can be empty, in that case the comma can be the first and/or the last thing in the return value.
 #define DETAIL_EM_REFL_SPLIT_LIST(seq_) EM_END(DETAIL_EM_REFL_SPLIT_LIST_LOOP_A seq_)
@@ -144,4 +175,3 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_END ,
 #define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0_END
 #define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0_END
-*/
