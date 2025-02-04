@@ -35,15 +35,15 @@ namespace em::Refl::Variants
 
     namespace detail
     {
-        template <typename T, typename I>
-        struct Alternatives {};
+        using std::get;
 
-        template <typename T, std::size_t ...I>
-        struct Alternatives<T, std::index_sequence<I...>> {using type = Meta::TypeList<std::variant_alternative_t<I, T>...>;};
+        template <typename T, std::size_t I>
+        using AltTypeCvref = decltype(get<I>(std::declval<T>()));
     }
 
-    // A `Meta::TypeList<...>` of the types in a variant.
-    // This follows the variant protocol instead of directly looking at the template parameters, so it can work for your own types too.
-    template <Type T>
-    using Alternatives = typename detail::Alternatives<std::remove_cvref_t<T>, std::make_index_sequence<std::variant_size_v<std::remove_cvref_t<T>>>>::type;
+    // Extracts the `I`th alternative type with the correct cvref-qualifiers if any (this isn't necessarily a reference, but often will be one).
+    // This is the return value of `get<I>(std::declval<T &&>())`. The proper cvref-qualifiers can't be reliably obtained from `std::variant_alterantive`.
+    // `std::variant_alternative<I, T>` returns the same type but without ref-qualifiers (but with cv-qualifiers).
+    template <Type T, std::size_t I>
+    using AlternativeTypeCvref = detail::AltTypeCvref<T, I>;
 }

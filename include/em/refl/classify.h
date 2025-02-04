@@ -20,9 +20,11 @@ namespace em::Refl
         unknown,
     };
 
-    template <typename T, template <typename> typename Pred = Meta::true_trait>
-    constexpr Category category_opt = []{
-        if constexpr (Adjust::NeedsAdjustment<T, Pred>)
+    // Determines the preferred customization point to access the object of type `T`. Cvref-qualifiers are ignored.
+    // The order is more or less arbitrary, except that adjustment should be first, our struct macros should probably be immediately after that.
+    template <typename T>
+    constexpr Category classify_opt = []{
+        if constexpr (Adjust::NeedsAdjustment<T>)
             return Category::adjust;
         else if constexpr (Structs::Type<T> || Bases::HasBases<T>)
             return Category::structure;
@@ -36,7 +38,7 @@ namespace em::Refl
             return Category::unknown;
     }();
 
-    template <typename T, template <typename> typename Pred = Meta::true_trait>
-    requires(category_opt<T> != Category::unknown)
-    constexpr Category category = category_opt<T, Pred>;
+    template <typename T>
+    requires(classify_opt<T> != Category::unknown)
+    constexpr Category classify = classify_opt<T>;
 }

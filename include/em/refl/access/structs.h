@@ -54,16 +54,16 @@ namespace em::Refl::Structs
     concept ValidMemberIndex = I >= 0 && I < num_members<T>;
 
 
-    // Get `I`th member of a struct, forced const.
+    // Get `I`th member of a struct, as if the struct was const.
     template <int I, Meta::Deduce..., Type T> requires ValidMemberIndex<T, I>
-    [[nodiscard]] constexpr auto &&GetMemberConst(T &&object)
+    [[nodiscard]] constexpr decltype(auto) GetMemberConst(T &&object)
     {
         return detail::Traits<T>::template GetMember<I>(Meta::make_const(std::forward<T>(object)));
     }
 
     // Get `I`th member of a struct, mutable if the input is mutable.
     template <int I, Meta::Deduce..., Type T> requires ValidMemberIndex<T, I>
-    [[nodiscard]] constexpr auto &&GetMemberMutable(T &&object)
+    [[nodiscard]] constexpr decltype(auto) GetMemberMutable(T &&object)
     {
         return detail::Traits<T>::template GetMember<I>(std::forward<T>(object));
     }
@@ -79,9 +79,13 @@ namespace em::Refl::Structs
         struct MemberType<T, I> {using type = typename decltype(Traits<T>::template GetMemberInfo<I>())::type;};
     }
 
-    // Returns the type of the `I`th struct member. Cvref-qualifiers on `T` are ignored.
+    // Returns the type of the `I`th struct member as declared. Cvref-qualifiers on `T` are ignored.
     template <Type T, int I> requires ValidMemberIndex<T, I>
     using MemberType = typename detail::MemberType<std::remove_cvref_t<T>, I>::type;
+    // Returns the type of the `I`th struct member with the correct cvref-qualifiers, if any.
+    // Respects cvref-qualifiers on `T` (but how exactly it does that depends on the type).
+    template <Type T, int I> requires ValidMemberIndex<T, I>
+    using MemberTypeCvref = decltype((GetMemberMutable)(std::declval<T &&>()));
 
 
     namespace detail
@@ -164,7 +168,7 @@ namespace em::Refl::Structs
         static constexpr int num_members = int(std::tuple_size_v<T>);
 
         template <int I>
-        [[nodiscard]] static constexpr auto &&GetMember(auto &&self) \
+        [[nodiscard]] static constexpr decltype(auto) GetMember(auto &&self) \
         {
             using std::get;
             return get<I>(EM_FWD(self));
@@ -174,7 +178,7 @@ namespace em::Refl::Structs
         [[nodiscard]] static constexpr auto GetMemberInfo()
         {
             using List = typename detail::TupleMemberInfo<T, std::make_index_sequence<std::tuple_size_v<T>>>::type;
-            return ::em::Meta::list_type_at<List, I>{};
+            return Meta::list_type_at<List, I>{};
         }
     };
 }

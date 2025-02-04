@@ -113,6 +113,7 @@ namespace em::Refl::Structs
         /* Member count. This is a fan */\
         static constexpr int num_members = 0 EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
         /* A getter for the members. */\
+        /* Here we return a reference, but custom classes can also return by value here. */\
         template <int _em_I> \
         static constexpr auto &&GetMember(auto &&_em_self) \
         { \
