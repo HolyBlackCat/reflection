@@ -85,7 +85,7 @@ namespace em::Refl::Structs
     // Returns the type of the `I`th struct member with the correct cvref-qualifiers, if any.
     // Respects cvref-qualifiers on `T` (but how exactly it does that depends on the type).
     template <Type T, int I> requires ValidMemberIndex<T, I>
-    using MemberTypeCvref = decltype((GetMemberMutable)(std::declval<T &&>()));
+    using MemberTypeCvref = decltype((GetMemberMutable<I>)(std::declval<T &&>()));
 
 
     namespace detail

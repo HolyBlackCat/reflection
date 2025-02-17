@@ -29,6 +29,14 @@ namespace em::Refl
         using attrs = Meta::TypeList<Attrs...>; // Optional, if not specified we assume no attributes. You can use any variadic template for the type list.
     };
 
+    enum class VisitMode
+    {
+        normal,
+        // A class sets this when visiting its own bases. This means either "don't visit virtual bases",
+        //   or "don't visit any bases" (if the bases are visited as a flat list, e.g. if we're just looking for existence of some type).
+        base_subobject,
+    };
+
     namespace detail
     {
         // Use this with `em::Meta::DetectBases`.

@@ -46,12 +46,12 @@ namespace em::Refl::Indirect
 
     // The result of calling `GetValue()`. Can depend on cvref-qualifiers on `T`. Usually a reference, but doesn't have to be one.
     template <Type T>
-    using ValueType = decltype(detail::Traits<T>::GetValue(std::declval<T>()));
+    using ValueTypeCvref = decltype(detail::Traits<T>::GetValue(std::declval<T>()));
 
     // Get the value of an optional. This can perfect-forward.
     // This will usually return a reference, but I guess there's no reason why a customized optional can't return by value here.
     template <Meta::Deduce..., Type T>
-    [[nodiscard]] constexpr ValueType<T> GetValue(T &&value)
+    [[nodiscard]] constexpr ValueTypeCvref<T> GetValue(T &&value)
     {
         return detail::Traits<T>::GetValue(std::forward<T>(value));
     }
