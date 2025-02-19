@@ -6,8 +6,7 @@
 #include <type_traits>
 
 // `em::Refl::TypeContainsElemCvref` recursively checks that a type contains some other type.
-// This could be implemented in terms of `VisitTypes` from `em/refl/visit_types.h`, but that has horrendous compilation times.
-//   Also that wouldn't work with detecting non-reflected bases.
+// This could be implemented in terms of `VisitTypes` from `em/refl/visit_types.h`, but that has worse compilation times.
 
 namespace em::Refl
 {
@@ -49,6 +48,8 @@ namespace em::Refl
         struct CheckMembers<T, Pred, std::integer_sequence<int, I0, I...>> : std::true_type {};
 
         // Checks all bases of `T` if `Mode != base_subobject`, otherwise returns false.
+        // NOTE! Unlike `VisitTypes`, here we iterate over a flat list of bases, instead of the proper hierarchy.
+        // Primarily because the hierarchy is more expensive to compute, and it doesn't matter anyway. On the other hand, `VisitTypes` does respect the hierarchy.
         template <typename T, template <typename> typename Pred, VisitMode Mode>
         struct CheckBases : CheckBaseTypeListLow<T, Bases::AllBasesFlat<T>, Pred> {};
         template <typename T, template <typename> typename Pred>

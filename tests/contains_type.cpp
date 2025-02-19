@@ -7,14 +7,25 @@
 
 namespace
 {
-    template <typename T, typename Elem>
-    constexpr bool contains_type_using_visit = em::Refl::VisitTypes<T>([]<typename U>{return em::Meta::SameTypeAndDescIsConstructibleFrom<U>(em::Meta::type_to_desc<Elem>);});
+    template <typename T, em::Refl::VisitMode = em::Refl::VisitMode::normal>
+    constexpr bool contains_type_using_visit(const em::Meta::CvrefFlagsAndType &desc)
+    {
+        if (em::Meta::SameTypeAndDescIsConstructibleFrom<T>(desc))
+            return true;
+
+        return (bool)em::Refl::VisitTypes<T>(
+            [&]<typename U, typename Desc, em::Refl::VisitMode Mode>()
+            {
+                return contains_type_using_visit<U, Mode>(desc);
+            }
+        );
+    }
 
 
     template <typename T, typename Elem>
     constexpr bool contains_type = []{
         constexpr bool a = em::Refl::TypeContainsElemCvref<T, Elem>;
-        constexpr bool b = contains_type_using_visit<T, Elem>;
+        constexpr bool b = contains_type_using_visit<T>(em::Meta::type_to_desc<Elem>);
         static_assert(a == b);
         return b;
     }();
@@ -139,7 +150,7 @@ struct HiddenBase {};
 struct HasHiddenBase : HiddenBase { EM_REFL() };
 // Note! This is a discrepancy between `TypeContainsElemCvref` and `VisitTypes`.
 static_assert(em::Refl::TypeContainsElemCvref<HasHiddenBase, HiddenBase>);
-static_assert(!contains_type_using_visit<HasHiddenBase, HiddenBase>);
+static_assert(!contains_type_using_visit<HasHiddenBase>(em::Meta::type_to_desc<HiddenBase>));
 
 struct A { EM_REFL() };
 struct B { EM_REFL() };

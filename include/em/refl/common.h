@@ -29,6 +29,9 @@ namespace em::Refl
         using attrs = Meta::TypeList<Attrs...>; // Optional, if not specified we assume no attributes. You can use any variadic template for the type list.
     };
 
+
+    // --- Visiting:
+
     enum class VisitMode
     {
         normal,
@@ -36,6 +39,20 @@ namespace em::Refl
         //   or "don't visit any bases" (if the bases are visited as a flat list, e.g. if we're just looking for existence of some type).
         base_subobject,
     };
+
+    // Element descriptions:
+
+    // Classes:
+    struct VisitingBase {};
+    struct VisitingVirtualBase {};
+    struct VisitingMemberBase {};
+    template <int I> struct VisitingMember : VisitingMemberBase, std::integral_constant<int, I> {};
+    // Variants:
+    struct VisitingVariantAlternativeBase {};
+    template <int I> struct VisitingVariantAlternative : VisitingMemberBase, std::integral_constant<int, I> {};
+    // Other:
+    struct VisitingOther {};
+
 
     namespace detail
     {
