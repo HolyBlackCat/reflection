@@ -1,5 +1,7 @@
 #pragma once
 
+#include "em/meta/const_for.h"
+#include "em/meta/cvref.h"
 #include "em/meta/deduce.h"
 #include "em/meta/functional.h"
 #include "em/meta/tags.h"
@@ -23,6 +25,11 @@ namespace em::Refl::Ranges
     // The range element type. Cvref-qualifiers of `T` are ignored.
     template <Type T>
     using ElementType = std::ranges::range_value_t<std::remove_cvref_t<T>>;
+
+    // Whether `T` is a range with the element type also being `T`. Cvref-qualifiers on `T` are ignored.
+    // This is true for silly types like `std::filesystem::path`.
+    template <typename T>
+    concept ElementTypeSameAsSelf = Meta::same_ignoring_cvref<T, ElementType<T>>;
 
     // A heuristic to check that a range owns its elements. If true, when the range is an rvalue, we should forward the elements.
     // Note that the forwarding should use `std::ranges::iter_move()` and friends.
@@ -60,6 +67,31 @@ namespace em::Refl::Ranges
         else
             return *std::forward<I>(iter);
     }
+
+
+    // Can we iterate over this range backwards? Cvref-qualifiers on `T` are ignored.
+    template <typename T>
+    concept BackwardIterable = Type<T> && std::ranges::bidirectional_range<std::remove_cvref_t<T>>;
+
+    enum class ForEachMode
+    {
+        forward, // Iterate forward.
+        try_backward, // Iterate backward if supported, otherwise forward.
+        only_backward, // Iterate backward, SFINAE error if not supported.
+    };
+
+    // Iterates over a range.
+    // Unlike the built-in loops, automatically forwards the elements correctly.
+    template <Meta::LoopBackendType LoopBackend, ForEachMode Mode = ForEachMode::forward, Meta::Deduce..., typename T>
+    requires (Mode != ForEachMode::only_backward) || BackwardIterable<T>
+    [[nodiscard]] decltype(auto) ForEach(T &&range, auto &&func)
+    {
+        if constexpr (Mode == ForEachMode::forward || !BackwardIterable<T>)
+            return Meta::ForEach<LoopBackend, Mode>(std::ranges::begin(range), std::ranges::end(range), [&](auto &&elem) -> decltype(auto) {return func((ForwardElement<T>)(elem));});
+        else
+            return Meta::ForEachReverse<LoopBackend, Mode>(std::ranges::begin(range), std::ranges::end(range), [&](auto &&elem) -> decltype(auto) {return func((ForwardElement<T>)(elem));});
+    }
+
 
     // The first element of a range. Uses `.front()` if present. Perfect-forwarded if applicable.
     template <Meta::Deduce..., Type T>

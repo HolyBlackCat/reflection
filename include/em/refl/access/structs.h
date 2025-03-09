@@ -51,7 +51,7 @@ namespace em::Refl::Structs
     constexpr int num_members = detail::Traits<T>::num_members;
 
     template <typename T, int I>
-    concept ValidMemberIndex = I >= 0 && I < num_members<T>;
+    concept ValidMemberIndex = Type<T> && I >= 0 && I < num_members<T>;
 
 
     // Get `I`th member of a struct, as if the struct was const.

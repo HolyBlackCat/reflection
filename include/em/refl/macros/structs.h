@@ -20,6 +20,7 @@
 
 #include <array>
 #include <concepts>
+#include <cstddef>
 #include <string_view>
 
 
@@ -133,7 +134,7 @@ namespace em::Refl::Structs
             static constexpr ::std::string_view GetMemberName(int _em_i) \
             { \
                 static constexpr ::std::array<::std::string_view, num_members> _em_array = { EM_END(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A seq_) }; \
-                return _em_array[_em_i]; \
+                return _em_array[::std::size_t(_em_i)]; \
             } \
         )() \
     }; \

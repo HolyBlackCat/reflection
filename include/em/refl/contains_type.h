@@ -90,6 +90,7 @@ namespace em::Refl
 
     // Checks if the type `T` contains an element of a type convertible to `Elem` somewhere in it. (`Elem` is usually a reference.)
     // If `T` is a non-reference, it's assumed to be an rvalue reference, as in `std::declval<T>()`.
+    // Uses `Meta::cvref_derived_from_and_convertible_to` internally.
     template <typename T, typename Elem>
     concept TypeContainsElemCvref = detail::ContainsType::Check<T, detail::ContainsType::PredConvertible<Elem>::template Pred>::value;
 

@@ -13,7 +13,7 @@ namespace
         if (em::Meta::SameTypeAndDescIsConstructibleFrom<T>(desc))
             return true;
 
-        return (bool)em::Refl::VisitTypes<T>(
+        return (bool)em::Refl::VisitTypes<T, em::Meta::LoopAnyOf<>>(
             [&]<typename U, typename Desc, em::Refl::VisitMode Mode>()
             {
                 return contains_type_using_visit<U, Mode>(desc);

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "em/macros/utils/forward.h"
 #include "em/meta/cvref.h"
+#include "em/meta/deduce.h"
 #include "em/meta/lists.h"
 
 #include <cstddef>
@@ -27,10 +29,13 @@ namespace em::Refl::Variants
      */
 
     template <typename T>
-    concept Type = requires{std::variant_size<std::remove_cvref_t<T>>::value;};
+    concept Type = requires{std::variant_size<std::remove_cvref_t<T>>::value;}; // Not using `_v` for SFINAE-friendliness.
 
     template <typename T>
     concept TypeUnqualified = Meta::cvref_unqualified<T> && Type<T>;
+
+    template <typename T, std::size_t I>
+    concept ValidMemberIndex = Type<T> && I >= 0 && I < std::variant_size<std::remove_cvref_t<T>>::value; // Not using `_v` for SFINAE-friendliness, just in case.
 
 
     namespace detail
@@ -46,4 +51,13 @@ namespace em::Refl::Variants
     // `std::variant_alternative<I, T>` returns the same type but without ref-qualifiers (but with cv-qualifiers).
     template <Type T, std::size_t I>
     using AlternativeTypeCvref = detail::AltTypeCvref<T, I>;
+
+    // Equivalent to `using std::get; get<I>(...)`.
+    // This exists solely so you don't have to do `using std::get` every time.
+    template <std::size_t I, Meta::Deduce..., typename T>
+    [[nodiscard]] constexpr AlternativeTypeCvref<T, I> Get(T &&var)
+    {
+        using std::get;
+        return get<I>(EM_FWD(var));
+    }
 }

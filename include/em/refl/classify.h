@@ -30,7 +30,7 @@ namespace em::Refl
             return Category::structure;
         else if constexpr (Indirect::Type<T>)
             return Category::indirect;
-        else if constexpr (Ranges::Type<T>)
+        else if constexpr (Ranges::Type<T> && !Ranges::ElementTypeSameAsSelf<T>)
             return Category::range;
         else if constexpr (Variants::Type<T>)
             return Category::variant;
