@@ -1,6 +1,5 @@
 #pragma once
 
-#include "em/meta/constants.h"
 #include "em/refl/access/adjust.h"
 #include "em/refl/access/bases.h"
 #include "em/refl/access/indirect.h"

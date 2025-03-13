@@ -7,26 +7,34 @@
 
 namespace
 {
-    template <typename T, em::Refl::VisitMode = em::Refl::VisitMode::normal>
+    template <typename T, em::Meta::TypePredicate Filter = em::Meta::true_predicate, em::Refl::VisitMode = em::Refl::VisitMode::normal>
     constexpr bool contains_type_using_visit(const em::Meta::CvrefFlagsAndType &desc)
     {
-        if (em::Meta::SameTypeAndDescIsConstructibleFrom<T>(desc))
-            return true;
+        if constexpr (!Filter::template type<T>::value)
+        {
+            return false;
+        }
+        else
+        {
+            if (em::Meta::SameTypeAndDescIsConstructibleFrom<T>(desc))
+                return true;
 
-        return (bool)em::Refl::VisitTypes<T, em::Meta::LoopAnyOf<>>(
-            [&]<typename U, typename Desc, em::Refl::VisitMode Mode>()
-            {
-                return contains_type_using_visit<U, Mode>(desc);
-            }
-        );
+            return (bool)em::Refl::VisitTypes<T, em::Meta::LoopAnyOf<>>(
+                [&]<typename U, typename Desc, em::Refl::VisitMode Mode>()
+                {
+                    return contains_type_using_visit<U, Filter, Mode>(desc);
+                }
+            );
+        }
     }
 
 
-    template <typename T, typename Elem>
+    template <typename T, typename Elem, em::Meta::TypePredicate Filter = em::Meta::true_predicate>
     constexpr bool contains_type = []{
-        constexpr bool a = em::Refl::TypeContainsElemCvref<T, Elem>;
-        constexpr bool b = contains_type_using_visit<T>(em::Meta::type_to_desc<Elem>);
-        static_assert(a == b);
+        constexpr bool a = em::Refl::TypeRecursivelyContainsElemCvref<T, Elem, Filter>;
+        constexpr bool b = (contains_type_using_visit<T, Filter>)(em::Meta::type_to_desc<Elem>);
+        static_assert(a <= b);
+        static_assert(a >= b);
         return b;
     }();
 }
@@ -148,8 +156,8 @@ static_assert(contains_type<std::variant<int, float> &&, float &&> == true);
 // Understanding the bases even if not reflected.
 struct HiddenBase {};
 struct HasHiddenBase : HiddenBase { EM_REFL() };
-// Note! This is a discrepancy between `TypeContainsElemCvref` and `VisitTypes`.
-static_assert(em::Refl::TypeContainsElemCvref<HasHiddenBase, HiddenBase>);
+// Note! This is a discrepancy between `TypeRecursivelyContainsElemCvref` and `VisitTypes`.
+static_assert(em::Refl::TypeRecursivelyContainsElemCvref<HasHiddenBase, HiddenBase>);
 static_assert(!contains_type_using_visit<HasHiddenBase>(em::Meta::type_to_desc<HiddenBase>));
 
 struct A { EM_REFL() };
@@ -168,3 +176,27 @@ static_assert(contains_type<E &, B &&> == false);
 static_assert(contains_type<E &&, B &&> == true);
 static_assert(contains_type<E &&, const B &&> == true);
 static_assert(contains_type<const E &&, const B &&> == true);
+
+
+
+// --- Filters.
+
+// The filter beats the predicate.
+static_assert(!contains_type<int, int, em::Meta::false_predicate>);
+
+EM_STRUCT(F)
+(
+    (std::vector<int>)(v)
+    (float)(f)
+)
+
+struct NotRange
+{
+    template <typename T>
+    using type = std::bool_constant<!em::Refl::Ranges::Type<T>>;
+};
+
+static_assert(contains_type<F, int>);
+static_assert(contains_type<F, float>);
+static_assert(!contains_type<F, int, NotRange>);
+static_assert(contains_type<F, float, NotRange>);

@@ -40,6 +40,14 @@ namespace em::Refl
         base_subobject,
     };
 
+    // Iteration direction for loops.
+    enum class IterationFlags
+    {
+        // If we try to iterate over a range backwards, and that range type doesn't support that, fall back to the forward iteration.
+        fallback_to_not_reverse = 1 << 0,
+    };
+    EM_FLAG_ENUM(IterationFlags)
+
     // Element descriptions:
 
     // Classes:

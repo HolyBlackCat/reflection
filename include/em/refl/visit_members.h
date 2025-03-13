@@ -2,7 +2,6 @@
 
 #include "em/macros/utils/forward.h"
 #include "em/meta/const_for.h"
-#include "em/meta/cvref.h"
 #include "em/meta/deduce.h"
 #include "em/refl/classify.h"
 #include "em/refl/common.h"
@@ -16,7 +15,8 @@ namespace em::Refl
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
     // `Mode` receives the mode that you should pass to any recursive calls to `VisitTypes(...)`. Nested calls should not use the default mode.
     // The return value of `func` is handled according to `LoopBackend`.
-    template <Meta::LoopBackendType LoopBackend, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
+    template <Meta::LoopBackendType LoopBackend, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
+    requires (!LoopBackend::is_reverse) || (bool(Flags & IterationFlags::fallback_to_not_reverse)) || Ranges::BackwardIterableOrNonRange<T>
     [[nodiscard]] constexpr decltype(auto) VisitMembers(T &&object, F &&func)
     {
         constexpr Category c = classify_opt<T>;
@@ -95,7 +95,7 @@ namespace em::Refl
         }
         else if constexpr (c == Category::range)
         {
-            return Ranges::ForEach<LoopBackend>(EM_FWD(object), [&](auto &&elem) -> decltype(auto) {return func.template operator()<VisitingOther, VisitMode::normal>(EM_FWD(elem));});
+            return Ranges::ForEach<LoopBackend, Flags>(EM_FWD(object), [&](auto &&elem) -> decltype(auto) {return func.template operator()<VisitingOther, VisitMode::normal>(EM_FWD(elem));});
         }
         else if constexpr (c == Category::variant)
         {

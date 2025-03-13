@@ -3,8 +3,6 @@
 #include "em/meta/const_for.h"
 #include "em/meta/cvref.h"
 #include "em/meta/deduce.h"
-#include "em/meta/functional.h"
-#include "em/meta/tags.h"
 #include "em/refl/common.h"
 
 #include <iterator>
@@ -72,24 +70,27 @@ namespace em::Refl::Ranges
     // Can we iterate over this range backwards? Cvref-qualifiers on `T` are ignored.
     template <typename T>
     concept BackwardIterable = Type<T> && std::ranges::bidirectional_range<std::remove_cvref_t<T>>;
-
-    enum class ForEachMode
-    {
-        forward, // Iterate forward.
-        try_backward, // Iterate backward if supported, otherwise forward.
-        only_backward, // Iterate backward, SFINAE error if not supported.
-    };
+    // Like `BackwardIterable`, but returns true for non-ranges instead of false.
+    template <typename T>
+    concept BackwardIterableOrNonRange = !Type<T> || BackwardIterable<T>;
 
     // Iterates over a range.
     // Unlike the built-in loops, automatically forwards the elements correctly.
-    template <Meta::LoopBackendType LoopBackend, ForEachMode Mode = ForEachMode::forward, Meta::Deduce..., typename T>
-    requires (Mode != ForEachMode::only_backward) || BackwardIterable<T>
+    // If `LoopBackend` wants to iterate in reverse, the range isn't iterable in reverse, and `IterationFlags::fallback_to_not_reverse` isn't set,
+    //   a SFINAE error is generated.
+    template <Meta::LoopBackendType LoopBackend, IterationFlags Flags = {}, Meta::Deduce..., typename T>
+    requires (!LoopBackend::is_reverse) || (bool(Flags & IterationFlags::fallback_to_not_reverse)) || BackwardIterable<T>
     [[nodiscard]] decltype(auto) ForEach(T &&range, auto &&func)
     {
-        if constexpr (Mode == ForEachMode::forward || !BackwardIterable<T>)
-            return Meta::ForEach<LoopBackend, Mode>(std::ranges::begin(range), std::ranges::end(range), [&](auto &&elem) -> decltype(auto) {return func((ForwardElement<T>)(elem));});
+        if constexpr (LoopBackend::is_reverse && !BackwardIterable<T>)
+        {
+            // If we're trying to iterate backwards and the loop backend doesn't support it, fall back to the normal iteration.
+            return (ForEach<typename LoopBackend::reverse, Flags>)(EM_FWD(range), EM_FWD(func));
+        }
         else
-            return Meta::ForEachReverse<LoopBackend, Mode>(std::ranges::begin(range), std::ranges::end(range), [&](auto &&elem) -> decltype(auto) {return func((ForwardElement<T>)(elem));});
+        {
+            return Meta::ForEach<LoopBackend>(std::ranges::begin(range), std::ranges::end(range), [&](auto &&elem) -> decltype(auto) {return func((ForwardElement<T>)(elem));});
+        }
     }
 
 
