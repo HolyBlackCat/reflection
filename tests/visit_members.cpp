@@ -17,5 +17,5 @@ struct D : B, C {EM_REFL()};
 [[maybe_unused]] static void foo()
 {
     // Just a minimal sanity check.
-    em::Refl::VisitMembers<em::Meta::LoopSimple>(D{}, []<em::Refl::VisitDesc Desc, em::Refl::VisitMode Mode>(auto &&){});
+    em::Refl::VisitMembers<em::Meta::LoopSimple>(D{}, []<em::Refl::VisitDesc Desc>(auto &&){});
 }

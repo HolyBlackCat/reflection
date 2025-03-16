@@ -61,8 +61,15 @@ namespace em::Refl
 
     // Element descriptions:
 
-    // This is the common base class.
-    struct BasicVisitingTag {protected: BasicVisitingTag() = default;};
+    // This is the common base class for the tags.
+    struct BasicVisitingTag
+    {
+        // The recommended mode for visiting recursively from here.
+        static constexpr VisitMode mode = VisitMode::normal;
+
+      protected:
+        BasicVisitingTag() = default;
+    };
 
     // Matches any visiting tag.
     // Note the use of `std::default_initializable` to reject bases with private destructors.
@@ -70,7 +77,13 @@ namespace em::Refl
     concept VisitDesc = std::derived_from<T, BasicVisitingTag> && std::default_initializable<T>;
 
     // For classes:
-    struct VisitingAnyBase : BasicVisitingTag {protected: VisitingAnyBase() = default;};
+    struct VisitingAnyBase : BasicVisitingTag
+    {
+        static constexpr VisitMode mode = VisitMode::base_subobject;
+
+      protected:
+        VisitingAnyBase() = default;
+    };
 
     struct VisitingDirectNonVirtualBase : VisitingAnyBase {VisitingDirectNonVirtualBase() = default;};
     struct VisitingVirtualBase : VisitingAnyBase {VisitingVirtualBase() = default;};

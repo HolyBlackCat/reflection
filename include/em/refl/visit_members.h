@@ -11,10 +11,10 @@
 namespace em::Refl
 {
     // Calls `func` on every member of `T`, non-recurisvely.
-    // `func` is `[]<VisitDesc Desc, VisitMode Mode>(auto &&member)` (or you can add another template parameter for the `member` type).
+    // `func` is `[]<VisitDesc Desc>(auto &&member)` (or you can add another template parameter for the `member` type).
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
-    // `Mode` receives the mode that you should pass to any recursive calls to `VisitTypes(...)`. Nested calls should not use the default mode.
     // The return value of `func` is handled according to `LoopBackend`.
+    // NOTE: When visitng recursively, must pass `Desc::mode` as the mode to any recursive calls, instead of the default mode.
     template <Meta::LoopBackendType LoopBackend, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
     requires (!LoopBackend::is_reverse) || (bool(Flags & IterationFlags::fallback_to_not_reverse)) || Ranges::BackwardIterableOrNonRange<T>
     [[nodiscard]] constexpr decltype(auto) VisitMembers(T &&object, F &&func)
@@ -23,18 +23,18 @@ namespace em::Refl
 
         if constexpr (c == Category::adjust)
         {
-            return EM_FWD(func).template operator()<VisitingOther, VisitMode::normal>(Adjust::Adjust(EM_FWD(object)));
+            return EM_FWD(func).template operator()<VisitingOther>(Adjust::Adjust(EM_FWD(object)));
         }
         else if constexpr (c == Category::indirect)
         {
             if constexpr (Indirect::AlwaysHasValue<T>)
             {
-                return EM_FWD(func).template operator()<VisitingOther, VisitMode::normal>(Indirect::GetValue(EM_FWD(object)));
+                return EM_FWD(func).template operator()<VisitingOther>(Indirect::GetValue(EM_FWD(object)));
             }
             else
             {
                 if (Indirect::HasValue(object)) // `HasValue` takes the object by const reference, so we don't need to forward it.
-                    return EM_FWD(func).template operator()<VisitingOther, VisitMode::normal>(Indirect::GetValue(EM_FWD(object)));
+                    return EM_FWD(func).template operator()<VisitingOther>(Indirect::GetValue(EM_FWD(object)));
                 else
                     return Meta::NoElements<LoopBackend>();
             }
@@ -52,7 +52,7 @@ namespace em::Refl
                             [&]<typename Base> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<VisitingVirtualBase, VisitMode::base_subobject>(Bases::CastToBase<Base>(object));
+                                return func.template operator()<VisitingVirtualBase>(Bases::CastToBase<Base>(object));
                             }
                         );
                     }
@@ -69,7 +69,7 @@ namespace em::Refl
                         [&]<typename Base> -> decltype(auto)
                         {
                             // Not forwarding the `func` in a loop.
-                            return func.template operator()<VisitingDirectNonVirtualBase, VisitMode::base_subobject>(Bases::CastToBase<Base>(object));
+                            return func.template operator()<VisitingDirectNonVirtualBase>(Bases::CastToBase<Base>(object));
                         }
                     );
                 },
@@ -86,7 +86,7 @@ namespace em::Refl
                             [&]<int I> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<VisitingClassMember<I>, VisitMode::normal>(Structs::GetMemberMutable<I>(object));
+                                return func.template operator()<VisitingClassMember<I>>(Structs::GetMemberMutable<I>(object));
                             }
                         );
                     }
@@ -95,7 +95,7 @@ namespace em::Refl
         }
         else if constexpr (c == Category::range)
         {
-            return Ranges::ForEach<LoopBackend, Flags>(EM_FWD(object), [&](auto &&elem) -> decltype(auto) {return func.template operator()<VisitingOther, VisitMode::normal>(EM_FWD(elem));});
+            return Ranges::ForEach<LoopBackend, Flags>(EM_FWD(object), [&](auto &&elem) -> decltype(auto) {return func.template operator()<VisitingOther>(EM_FWD(elem));});
         }
         else if constexpr (c == Category::variant)
         {
@@ -103,7 +103,7 @@ namespace em::Refl
                 [&]<std::size_t I> -> decltype(auto)
                 {
                     // Not forwarding the `func` in a loop.
-                    return func.template operator()<VisitingVariantAlternative<I>, VisitMode::normal>(Variants::Get<I>(EM_FWD(object)));
+                    return func.template operator()<VisitingVariantAlternative<I>>(Variants::Get<I>(EM_FWD(object)));
                 }
             );
         }

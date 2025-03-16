@@ -20,9 +20,9 @@ namespace
                 return true;
 
             return (bool)em::Refl::VisitTypes<T, em::Meta::LoopAnyOf<>>(
-                [&]<typename U, em::Refl::VisitDesc Desc, em::Refl::VisitMode Mode>()
+                [&]<typename U, em::Refl::VisitDesc Desc>()
                 {
-                    return contains_type_using_visit<U, Filter, Mode>(desc);
+                    return contains_type_using_visit<U, Filter, Desc::mode>(desc);
                 }
             );
         }

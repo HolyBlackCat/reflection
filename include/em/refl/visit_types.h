@@ -15,11 +15,11 @@
 namespace em::Refl
 {
     // Calls `func` on every subtype of `T`, non-recurisvely. If `T` is a non-reference, adds `&&` automatically.
-    // `func` is `[]<typename T, VisitDesc Desc, VisitMode Mode>`.
+    // `func` is `[]<typename T, VisitDesc Desc>`.
     // The `T` argument receives each subtype in order (usually a reference, but not always; you usually should assume `&&` for non-references).
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
-    // `Mode` receives the mode that you should pass to any recursive calls to `VisitTypes(...)`. Nested calls should not use the default mode.
     // The return value of `func` is handled according to `LoopBackend`.
+    // NOTE: When visitng recursively, must pass `Desc::mode` as the mode to any recursive calls, instead of the default mode.
     template <typename T, Meta::LoopBackendType LoopBackend, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename F>
     [[nodiscard]] constexpr decltype(auto) VisitTypes(F &&func)
     {
@@ -29,11 +29,11 @@ namespace em::Refl
 
         if constexpr (c == Category::adjust)
         {
-            return EM_FWD(func).template operator()<Adjust::AdjustedType<T &&>, VisitingOther, VisitMode::normal>();
+            return EM_FWD(func).template operator()<Adjust::AdjustedType<T &&>, VisitingOther>();
         }
         else if constexpr (c == Category::indirect)
         {
-            return EM_FWD(func).template operator()<Indirect::ValueTypeCvref<T &&>, VisitingOther, VisitMode::normal>();
+            return EM_FWD(func).template operator()<Indirect::ValueTypeCvref<T &&>, VisitingOther>();
         }
         else if constexpr (c == Category::structure)
         {
@@ -48,7 +48,7 @@ namespace em::Refl
                             [&]<typename Base> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingVirtualBase, VisitMode::base_subobject>();
+                                return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingVirtualBase>();
                             }
                         );
                     }
@@ -65,7 +65,7 @@ namespace em::Refl
                         [&]<typename Base> -> decltype(auto)
                         {
                             // Not forwarding the `func` in a loop.
-                            return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingDirectNonVirtualBase, VisitMode::base_subobject>();
+                            return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingDirectNonVirtualBase>();
                         }
                     );
                 },
@@ -82,7 +82,7 @@ namespace em::Refl
                             [&]<int I> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<Structs::MemberTypeCvref<TT &&, I>, VisitingClassMember<I>, VisitMode::normal>();
+                                return func.template operator()<Structs::MemberTypeCvref<TT &&, I>, VisitingClassMember<I>>();
                             }
                         );
                     }
@@ -91,7 +91,7 @@ namespace em::Refl
         }
         else if constexpr (c == Category::range)
         {
-            return EM_FWD(func).template operator()<Ranges::ElementTypeCvref<T>, VisitingOther, VisitMode::normal>();
+            return EM_FWD(func).template operator()<Ranges::ElementTypeCvref<T>, VisitingOther>();
         }
         else if constexpr (c == Category::variant)
         {
@@ -99,7 +99,7 @@ namespace em::Refl
                 [&]<std::size_t I> -> decltype(auto)
                 {
                     // Not forwarding the `func` in a loop.
-                    return func.template operator()<Variants::AlternativeTypeCvref<T, I>, VisitingVariantAlternative<I>, VisitMode::normal>();
+                    return func.template operator()<Variants::AlternativeTypeCvref<T, I>, VisitingVariantAlternative<I>>();
                 }
             );
         }
