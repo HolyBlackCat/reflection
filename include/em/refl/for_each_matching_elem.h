@@ -32,16 +32,28 @@ namespace em::Refl
     requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
     constexpr decltype(auto) ForEachElemMatchingPred(T &&input, F &&func)
     {
+        static constexpr IterationFlags base_class_flags = []{
+            if constexpr (bool(Flags & IterationFlags::predicate_finds_bases))
+                return Flags | IterationFlags::ignore_root * Pred::template type<T &&>::value;
+            else
+                return Flags;
+        }();
+
         return Meta::RunEachFunc<LoopBackend>(
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
-                if constexpr (Pred2::template type<T &&>::value)
+                if (bool(Flags & IterationFlags::ignore_root))
+                {
+                    return Meta::NoElements<LoopBackend>();
+                }
+                else if constexpr (Pred2::template type<T &&>::value)
                 {
                     // Work around Clang bug: https://github.com/llvm/llvm-project/issues/61426
                     // Don't be confused by the ticket name, it apparently applies here.
                     // This isn't fixed in trunk yet at the time of writing, so the version condition might need to be bumped.
                     #if EM_IS_CLANG_VERSION(<= 20)
-                    if constexpr (Pred::template type<T &&>::value)
+                    if constexpr (!bool(Flags & IterationFlags::ignore_root))
+                    if constexpr (Pred::template type<T &&>::value) // Sic, stacking conditions.
                     #endif
                     return func(EM_FWD(input));
                 }
@@ -54,9 +66,11 @@ namespace em::Refl
             {
                 if constexpr (TypeRecursivelyContainsPred<T, Pred2>)
                 {
-                    return (VisitMembers<LoopBackend, Flags, Mode>)(EM_FWD(input), [&]<typename Desc, VisitMode Submode>(auto &&member) -> decltype(auto)
+                    return (VisitMembers<LoopBackend, Flags, Mode>)(EM_FWD(input), [&]<VisitDesc Desc, VisitMode Submode>(auto &&member) -> decltype(auto)
                     {
-                        return (ForEachElemMatchingPred<Pred2, LoopBackend, Flags, Submode>)(EM_FWD(member), EM_FWD(func));
+                        static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? base_class_flags : Flags;
+
+                        return (ForEachElemMatchingPred<Pred2, LoopBackend, cur_flags, Submode>)(EM_FWD(member), EM_FWD(func));
                     });
                 }
                 else
@@ -72,10 +86,11 @@ namespace em::Refl
     // Calls `func(elem)` on every matching element.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
+    // Note that the `IterationFlags::predicate_finds_bases` flag is always added automatically here.
     template <typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
     requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags>
     constexpr decltype(auto) ForEachElemOfTypeCvref(T &&input, F &&func)
     {
-        return (ForEachElemMatchingPred<PredTypeMatchesElemCvref<Elem>, LoopBackend, Flags, Mode>)(EM_FWD(input), EM_FWD(func));
+        return (ForEachElemMatchingPred<PredTypeMatchesElemCvref<Elem>, LoopBackend, Flags | IterationFlags::predicate_finds_bases, Mode>)(EM_FWD(input), EM_FWD(func));
     }
 }

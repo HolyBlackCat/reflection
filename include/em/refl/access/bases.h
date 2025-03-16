@@ -8,11 +8,11 @@
 namespace em::Refl::Bases
 {
     // Casts a derived object to one of its base classes, with perfect forwarding.
-    template <Meta::cvref_unqualified Derived, Meta::Deduce..., typename Base>
+    template <Meta::cvref_unqualified Base, Meta::Deduce..., typename Derived>
     requires Meta::derived_from_ignoring_cvref<Derived, Base>
-    [[nodiscard]] constexpr auto CastToBase(Base &&source) -> Meta::copy_cvref<Base &&, Derived>
+    [[nodiscard]] constexpr auto CastToBase(Derived &&source) -> Meta::copy_cvref<Derived &&, Base>
     {
-        return static_cast<Meta::copy_cvref<Base &&, Derived>>(*static_cast<std::remove_reference_t<Derived> *>(&source));
+        return static_cast<Meta::copy_cvref<Derived &&, Base>>(*static_cast<std::remove_reference_t<Base> *>(&source));
     }
 
     namespace detail

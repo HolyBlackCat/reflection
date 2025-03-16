@@ -45,21 +45,43 @@ namespace em::Refl
     {
         // If we try to iterate over a range backwards, and that range type doesn't support that, fall back to the forward iteration.
         fallback_to_not_reverse = 1 << 0,
+
+        // Recursive functions use those: [
+
+        // Don't call the lambda on the top-level object even if it matches the predicate.
+        ignore_root = 1 << 1,
+
+        // The specified predicate automatically handles the bases.
+        // This means that if the predicate returned true on the derived class, we shouldn't check it and call the lambda again for the bases.
+        predicate_finds_bases = 1 << 2,
+
+        // ]
     };
     EM_FLAG_ENUM(IterationFlags)
 
     // Element descriptions:
 
-    // Classes:
-    struct VisitingBase {};
-    struct VisitingVirtualBase {};
-    struct VisitingMemberBase {};
-    template <int I> struct VisitingMember : VisitingMemberBase, std::integral_constant<int, I> {};
-    // Variants:
-    struct VisitingVariantAlternativeBase {};
-    template <int I> struct VisitingVariantAlternative : VisitingMemberBase, std::integral_constant<int, I> {};
+    // This is the common base class.
+    struct BasicVisitingTag {protected: BasicVisitingTag() = default;};
+
+    // Matches any visiting tag.
+    // Note the use of `std::default_initializable` to reject bases with private destructors.
+    template <typename T>
+    concept VisitDesc = std::derived_from<T, BasicVisitingTag> && std::default_initializable<T>;
+
+    // For classes:
+    struct VisitingAnyBase : BasicVisitingTag {protected: VisitingAnyBase() = default;};
+
+    struct VisitingDirectNonVirtualBase : VisitingAnyBase {VisitingDirectNonVirtualBase() = default;};
+    struct VisitingVirtualBase : VisitingAnyBase {VisitingVirtualBase() = default;};
+
+    struct VisitingSomeClassMember : BasicVisitingTag {protected: VisitingSomeClassMember() = default;};
+    template <int I> struct VisitingClassMember : VisitingSomeClassMember, std::integral_constant<int, I> {VisitingClassMember() = default;};
+    // For variants:
+    struct VisitingSomeVariantAlternative : BasicVisitingTag {protected: VisitingSomeVariantAlternative() = default;};
+    template <int I> struct VisitingVariantAlternative : VisitingSomeVariantAlternative, std::integral_constant<int, I> {VisitingVariantAlternative() = default;};
     // Other:
-    struct VisitingOther {};
+    struct VisitingOther : BasicVisitingTag {VisitingOther() = default;};
 
 
     namespace detail

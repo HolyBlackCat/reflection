@@ -15,7 +15,7 @@
 namespace em::Refl
 {
     // Calls `func` on every subtype of `T`, non-recurisvely. If `T` is a non-reference, adds `&&` automatically.
-    // `func` is `[]<typename T, typename Desc, VisitMode Mode>`.
+    // `func` is `[]<typename T, VisitDesc Desc, VisitMode Mode>`.
     // The `T` argument receives each subtype in order (usually a reference, but not always; you usually should assume `&&` for non-references).
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
     // `Mode` receives the mode that you should pass to any recursive calls to `VisitTypes(...)`. Nested calls should not use the default mode.
@@ -65,7 +65,7 @@ namespace em::Refl
                         [&]<typename Base> -> decltype(auto)
                         {
                             // Not forwarding the `func` in a loop.
-                            return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingBase, VisitMode::base_subobject>();
+                            return func.template operator()<Meta::copy_cvref<TT &&, Base>, VisitingDirectNonVirtualBase, VisitMode::base_subobject>();
                         }
                     );
                 },
@@ -82,7 +82,7 @@ namespace em::Refl
                             [&]<int I> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<Structs::MemberTypeCvref<TT &&, I>, VisitingMember<I>, VisitMode::normal>();
+                                return func.template operator()<Structs::MemberTypeCvref<TT &&, I>, VisitingClassMember<I>, VisitMode::normal>();
                             }
                         );
                     }

@@ -11,7 +11,7 @@
 namespace em::Refl
 {
     // Calls `func` on every member of `T`, non-recurisvely.
-    // `func` is `[]<typename Desc, VisitMode Mode>(auto &&member)` (or you can add another template parameter for the `member` type).
+    // `func` is `[]<VisitDesc Desc, VisitMode Mode>(auto &&member)` (or you can add another template parameter for the `member` type).
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
     // `Mode` receives the mode that you should pass to any recursive calls to `VisitTypes(...)`. Nested calls should not use the default mode.
     // The return value of `func` is handled according to `LoopBackend`.
@@ -69,7 +69,7 @@ namespace em::Refl
                         [&]<typename Base> -> decltype(auto)
                         {
                             // Not forwarding the `func` in a loop.
-                            return func.template operator()<VisitingVirtualBase, VisitMode::base_subobject>(Bases::CastToBase<Base>(object));
+                            return func.template operator()<VisitingDirectNonVirtualBase, VisitMode::base_subobject>(Bases::CastToBase<Base>(object));
                         }
                     );
                 },
@@ -86,7 +86,7 @@ namespace em::Refl
                             [&]<int I> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<VisitingMember<I>, VisitMode::normal>(Structs::GetMemberMutable<I>(object));
+                                return func.template operator()<VisitingClassMember<I>, VisitMode::normal>(Structs::GetMemberMutable<I>(object));
                             }
                         );
                     }
