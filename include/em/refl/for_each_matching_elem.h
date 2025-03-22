@@ -8,7 +8,7 @@
 #include "em/refl/is_backward_iterable.h"
 #include "em/refl/visit_members.h"
 
-#include <type_traits>
+#include <concepts>
 
 namespace em::Refl
 {
@@ -32,13 +32,15 @@ namespace em::Refl
     requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
     constexpr decltype(auto) ForEachElemMatchingPred(T &&input, F &&func)
     {
-        static constexpr IterationFlags sub_flags = Flags & ~IterationFlags::ignore_root;
+        static constexpr bool is_new_instance = !(Mode == VisitMode::base_subobject && bool(Flags & IterationFlags::predicate_finds_bases));
 
-        static constexpr IterationFlags sub_flags_base = []{
-            if constexpr (bool(Flags & IterationFlags::predicate_finds_bases))
-                return sub_flags | IterationFlags::ignore_root * Pred::template type<T &&>::value;
+        static constexpr IterationFlags next_flags = is_new_instance ? Flags & ~IterationFlags::ignore_root : Flags;
+
+        static constexpr IterationFlags next_flags_base = []{
+            if constexpr (bool(Flags & IterationFlags::predicate_finds_bases) && !bool(Flags & IterationFlags::ignore_root))
+                return next_flags | IterationFlags::ignore_root * Pred::template type<T &&>::value;
             else
-                return sub_flags;
+                return next_flags;
         }();
 
         return Meta::RunEachFunc<LoopBackend>(
@@ -66,11 +68,14 @@ namespace em::Refl
             },
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
+                // Here `TypeRecursivelyContainsPred` doesn't respect `ignore_root` (returns a false positive),
+                //   but since the resulting iteration only traverses bases, it should be free.
+                // It's easier to do this than to patch `TypeRecursivelyContainsPred`.
                 if constexpr (TypeRecursivelyContainsPred<T, Pred2>)
                 {
                     return (VisitMembers<LoopBackend, Flags, Mode>)(EM_FWD(input), [&]<VisitDesc Desc>(auto &&member) -> decltype(auto)
                     {
-                        static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? sub_flags_base : sub_flags;
+                        static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? next_flags_base : next_flags;
 
                         return (ForEachElemMatchingPred<Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(member), EM_FWD(func));
                     });
