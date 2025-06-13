@@ -40,4 +40,7 @@ namespace em::Refl
     template <typename T>
     requires(classify_opt<T> != Category::unknown)
     constexpr Category classify = classify_opt<T>;
+
+    template <typename T, Category C>
+    concept ClassifiesAs = classify_opt<T> == C;
 }
