@@ -1,9 +1,7 @@
 #pragma once
 
 #include "em/macros/utils/forward.h"
-#include "em/meta/concepts.h"
-#include "em/meta/cvref.h"
-#include "em/meta/deduce.h"
+#include "em/meta/common.h"
 #include "em/refl/common.h"
 
 #include <type_traits>

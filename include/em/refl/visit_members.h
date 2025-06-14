@@ -2,7 +2,7 @@
 
 #include "em/macros/utils/forward.h"
 #include "em/meta/const_for.h"
-#include "em/meta/deduce.h"
+#include "em/meta/common.h"
 #include "em/refl/classify.h"
 #include "em/refl/common.h"
 

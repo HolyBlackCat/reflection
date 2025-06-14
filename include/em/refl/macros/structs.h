@@ -11,17 +11,13 @@
 #include "em/macros/meta/ranges.h"
 #include "em/macros/meta/sequence_for.h"
 #include "em/macros/utils/forward.h"
-#include "em/meta/cvref.h"
-#include "em/meta/lists.h"
-#include "em/meta/packs.h"
-#include "em/meta/stateful/list.h"
-#include "em/meta/tags.h"
+#include "em/meta/common.h" // IWYU pragma: keep, used in the macros.
+#include "em/meta/lists.h" // IWYU pragma: keep, used in the macros.
 #include "em/refl/common.h"
 
-#include <array>
-#include <concepts>
-#include <cstddef>
-#include <string_view>
+#include <array> // IWYU pragma: keep, used in the macros.
+#include <cstddef> // IWYU pragma: keep, used in the macros.
+#include <string_view> // IWYU pragma: keep, used in the macros.
 
 
 namespace em::Refl::Structs

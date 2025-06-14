@@ -1,6 +1,7 @@
 #pragma once
 
-#include "em/meta/cvref.h"
+#include "em/macros/utils/flag_enum.h"
+#include "em/meta/common.h"
 #include "em/meta/lists.h"
 
 #include <concepts>

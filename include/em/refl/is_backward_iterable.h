@@ -1,7 +1,7 @@
 #pragma once
 
+#include "em/meta/common.h"
 #include "em/refl/classify.h"
-#include "em/meta/constants.h"
 #include "em/refl/contains_type.h"
 
 namespace em::Refl

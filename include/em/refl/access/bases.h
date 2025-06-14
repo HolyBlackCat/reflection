@@ -1,7 +1,6 @@
 #pragma once
 
-#include "em/meta/cvref.h"
-#include "em/meta/deduce.h"
+#include "em/meta/common.h"
 #include "em/meta/detect_bases.h"
 #include "em/refl/common.h"
 
@@ -9,7 +8,7 @@ namespace em::Refl::Bases
 {
     // Casts a derived object to one of its base classes, with perfect forwarding.
     template <Meta::cvref_unqualified Base, Meta::Deduce..., typename Derived>
-    requires Meta::derived_from_ignoring_cvref<Derived, Base>
+    requires Meta::same_or_derived_from_ignoring_cvref<Derived, Base>
     [[nodiscard]] constexpr auto CastToBase(Derived &&source) -> Meta::copy_cvref<Derived &&, Base>
     {
         return static_cast<Meta::copy_cvref<Derived &&, Base>>(*static_cast<std::remove_reference_t<Base> *>(&source));

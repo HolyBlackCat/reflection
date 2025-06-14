@@ -1,8 +1,7 @@
 #pragma once
 
 #include "em/meta/const_for.h"
-#include "em/meta/cvref.h"
-#include "em/meta/deduce.h"
+#include "em/meta/common.h"
 #include "em/refl/common.h"
 
 #include <iterator>

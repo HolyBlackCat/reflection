@@ -2,7 +2,6 @@
 
 #include "em/macros/platform/compiler.h"
 #include "em/meta/const_for.h"
-#include "em/meta/deduce.h"
 #include "em/refl/common.h"
 #include "em/refl/contains_type.h"
 #include "em/refl/is_backward_iterable.h"

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "em/meta/constants.h"
-#include "em/meta/cvref.h"
+#include "em/meta/common.h"
 #include "em/meta/type_predicates.h"
 #include "em/refl/classify.h"
 
@@ -101,12 +100,12 @@ namespace em::Refl
     struct PredTypeMatchesElemCvref
     {
         template <typename Type>
-        using type = std::bool_constant<Meta::cvref_derived_from_and_convertible_to<Type, Elem>>;
+        using type = std::bool_constant<Meta::same_or_derived_from_and_cvref_convertible_to<Type, Elem>>;
     };
 
     // Checks if the type `T` contains an element of a type convertible to `Elem` somewhere in it. (`Elem` is usually a reference.)
     // If `T` is a non-reference, it's assumed to be an rvalue reference, as in `std::declval<T>()`.
-    // Uses `Meta::cvref_derived_from_and_convertible_to` internally.
+    // Uses `Meta::same_or_derived_from_and_cvref_convertible_to` internally.
     // The `Filter` predicate prevents recursion into the types for which it returns false. Also it overrides the `Pred` predicate:
     //   if `Filter` returns false, the `Pred` predicate isn't checked for this type.
     template <typename T, typename Elem, typename/*TypePredicate*/ Filter = Meta::true_predicate>
