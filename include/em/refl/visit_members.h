@@ -86,7 +86,7 @@ namespace em::Refl
                             [&]<int I> -> decltype(auto)
                             {
                                 // Not forwarding the `func` in a loop.
-                                return func.template operator()<VisitingClassMember<I>>(Structs::GetMemberMutable<I>(object));
+                                return func.template operator()<VisitingClassMember<I, std::remove_cvref_t<TT>>>(Structs::GetMemberMutable<I>(object));
                             }
                         );
                     }

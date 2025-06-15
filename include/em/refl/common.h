@@ -90,7 +90,9 @@ namespace em::Refl
     struct VisitingVirtualBase : VisitingAnyBase {VisitingVirtualBase() = default;};
 
     struct VisitingSomeClassMember : BasicVisitingTag {protected: VisitingSomeClassMember() = default;};
-    template <int I> struct VisitingClassMember : VisitingSomeClassMember, std::integral_constant<int, I> {VisitingClassMember() = default;};
+    // Here `::type = Class` is the enclosing class, and `::value = I` is the member index.
+    // We pass them here to simplify querying the attributes on the members.
+    template <int I, Meta::cvref_unqualified Class> struct VisitingClassMember : VisitingSomeClassMember, std::integral_constant<int, I> {VisitingClassMember() = default; using type = Class;};
     // For variants:
     struct VisitingSomeVariantAlternative : BasicVisitingTag {protected: VisitingSomeVariantAlternative() = default;};
     template <int I> struct VisitingVariantAlternative : VisitingSomeVariantAlternative, std::integral_constant<int, I> {VisitingVariantAlternative() = default;};
