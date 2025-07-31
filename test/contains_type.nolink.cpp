@@ -1,4 +1,5 @@
 #include "em/refl/contains_type.h"
+#include "em/meta/cvref_extras.h"
 #include "em/refl/macros/structs.h"
 #include "em/refl/visit_types.h"
 
