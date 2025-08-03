@@ -1,12 +1,12 @@
 #include "em/refl/macros/structs.h"
-#include "em/refl/access/structs.h"
+#include "em/refl/access/structs/core.h"
 
 class A
 {
     EM_REFL(
         (int)(x)
       EM_PRIVATE
-      EM_ANNOTATE_LOW(blah,, 42, 43) // The second argument is empty, so we don't error despite this being an unused annotation.
+      EM_REFL_ANNOTATE_LOW(blah,, 42, 43) // The second argument is empty, so we don't error despite this being an unused annotation.
         // Test that leading non-letters work in the type.
         (::std::type_identity_t<float>)(y,42)
     )
@@ -68,6 +68,27 @@ static_assert(em::Refl::Structs::member_has_attribute<Extras, 2, A2_>);
 // static_assert(em::Refl::Structs::member_has_attribute<Extras, 2, A2>); // Hard error because of the ambiguity.
 static_assert(std::is_same_v<em::Refl::Structs::MemberFindAttribute<Extras, 3, A2_>, A2_>);
 static_assert(std::is_same_v<em::Refl::Structs::MemberFindAttribute<Extras, 3, A2>, A2_>);
+
+
+// Unnamed members!
+
+struct UnnamedMembers
+{
+    EM_REFL(
+        EM_UNNAMED_MEMBERS
+    )
+};
+static_assert(!em::Refl::Structs::HasMemberNames<UnnamedMembers>);
+
+struct UnnamedMembers2
+{
+    EM_REFL(
+        EM_UNNAMED_MEMBERS
+        (int)(x)
+        (float)(y)
+    )
+};
+static_assert(!em::Refl::Structs::HasMemberNames<UnnamedMembers2>);
 
 
 // Empty classes!
