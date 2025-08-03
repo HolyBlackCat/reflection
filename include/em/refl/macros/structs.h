@@ -43,7 +43,7 @@ namespace em::Refl::Structs
  *     {
  *         EM_REFL(
  *             (type)(name)               // Basic declaration, the initializer defaults to `{}`.
- *         EM_PUBLIC                      // Access modifiers.
+ *           EM_PUBLIC                    // Access modifiers.
  *             (type)(name, 42)           // With initializer.
  *             (type, attr1, attr2)(name) // With attributes. Those are types derived from `em::Refl::BasicAttribute`. The initializer is allowed here too of course.
  *         )
@@ -59,13 +59,15 @@ namespace em::Refl::Structs
 #define EM_CLASS(.../*name_etc*/) class __VA_ARGS__ DETAIL_EM_STRUCT_BODY
 #define DETAIL_EM_STRUCT_BODY(...) { EM_REFL(__VA_ARGS__) };
 
+// This optionally goes before the members in `EM_REFL`/`EM_STRUCT`/`EM_CLASS`.
+// If specified, the member names are not emitted.
 #define EM_UNNAMED_MEMBERS (,_em_unnamed_members)
 
 // For custom annotations in `EM_REFL(...)`.
 // `...` gets pasted into the class verbatim.
 // `category_` is a single-word ID that roughly explains what this is. `data_` can be anything.
 // `...`, if specified, is inserted literally into the class, inbetween the members.
-#define EM_VERBATIM_LOW(category_, data_, .../*verbatim*/) (_em_verbatim)(category_,data_,__VA_ARGS__)
+#define EM_VERBATIM_LOW(category_, data_, .../*verbatim*/) (category_,data_,__VA_ARGS__)(_em_verbatim)
 
 
 // --- Internals:
@@ -86,14 +88,16 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL)(p_type_attrs_, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(__VA_ARGS__)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL)(p_type_attrs_, __VA_ARGS__)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_DECL(p_type_attrs_, .../*name_ [,init_...]*/) ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_INITIALIZER(__VA_ARGS__))({});
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM(p_type_attrs_, category_, data_, .../*text_*/) __VA_ARGS__
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM(p_content_, ...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_1(EM_IDENTITY p_content_)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_1(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_2(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_2(category_, data_, .../*text*/) __VA_ARGS__
 #define DETAIL_EM_REFL_INITIALIZER(unused_, ...) __VA_OPT__(= __VA_ARGS__)
 
-// If `p_type_attrs_` is `_em_verbatim`, returns `a`. Otherwise returns `b`.
-// `DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)(a)(b)`
-#define DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_IF_VERBATIM_, EM_IDENTITY p_type_attrs_)
+// If `...` starts with `_em_verbatim`, returns `a`. Otherwise returns `b`.
+// `DETAIL_EM_REFL_IF_VERBATIM(...)(a)(b)`
+#define DETAIL_EM_REFL_IF_VERBATIM(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_IF_VERBATIM_, __VA_ARGS__)
 #define DETAIL_EM_REFL_IF_VERBATIM__em_verbatim ,
 
 // Generates metadata for a class. `seq_` is the list of members, preprocessed with `EM_SEQ_GROUP2(...)`.
@@ -143,22 +147,22 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)()(+1)
+#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(__VA_ARGS__)()(+1)
 // A loop to emit `if constexpr (i == counter) return member; else` for all members, to return references to them.
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP, SF_NULL, 0, seq)
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, p_type_attrs_, name_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)(counter_)(counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else)
+#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, p_type_attrs_, name_, ...) DETAIL_EM_REFL_IF_VERBATIM(name_)(counter_)(counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else)
 // A loop to emit a list of lists of member types and attributes.
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(p_type_attrs_)()(, ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>)
+#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(p_type_attrs_, ...) DETAIL_EM_REFL_IF_VERBATIM(__VA_ARGS__)()(, ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>)
 // A loop to emit a list of lists of member names.
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(p_type_attrs_, name_, ...) #name_,
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(p_type_attrs_, name_, ...) DETAIL_EM_REFL_IF_VERBATIM(name_)()(#name_,)
 
 // Given a list `(,a)(,b)(,c)(d)(e)(f)`, inserts a comma to produce `(,a)(,b)(,c) , (d)(e)(f)`.
 // Either half can be empty, in that case the comma can be the first and/or the last thing in the return value.

@@ -5,7 +5,9 @@ class A
 {
     EM_REFL(
         (int)(x)
-        (float)(y,42)
+      EM_PRIVATE
+        // Test that leading non-letters work in the type.
+        (::std::type_identity_t<float>)(y,42)
     )
 };
 
