@@ -6,6 +6,7 @@ class A
     EM_REFL(
         (int)(x)
       EM_PRIVATE
+      EM_ANNOTATE_LOW(blah,, 42, 43) // The second argument is empty, so we don't error despite this being an unused annotation.
         // Test that leading non-letters work in the type.
         (::std::type_identity_t<float>)(y,42)
     )
