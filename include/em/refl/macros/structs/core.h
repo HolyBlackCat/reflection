@@ -62,22 +62,26 @@ namespace em::Refl::Structs
 // If specified, the member names are not emitted.
 #define EM_UNNAMED_MEMBERS (,_em_unnamed_members)
 
-// Will preprocess the entire member list of `EM_REFL()` (including verbatim blocks and annotations, but excluding control statements),
-//   using those macros. Those are feed as parameters to `SF_FOR_EACH`.
-// Each loop iteration receives `(...), name_or_kind [,...]`. If you want to leave this entity unchanged, you must emit it back, enclosed in `(...)`.
-// You can also emit your own new entities, in the same format as explained below.
-// Note that the format here is `((a...), b...)` despite `EM_REFL` operating on `(a...)(b...)`. They are grouped this way before being sent here.
-// Call `EM_REFL_META_KIND(name_or_kind)` to get the entity kind: either a field, a verbatim block, or an annotation. Concat the resulting kind
-//   to a macro name and dispatch based on that.
-// If you got `field`:      then you receive `(type [,attrs...]), name [,init...]`. This declares a member variable.
-// If you got `verbatim`:   then you receive `(category, data, text...), _em_verbatim`. This emits text verbatim in the same place as the member variables.
-//                            For explanation of `category` and `data` see `EM_REFL_VERBATIM_LOW()`. `_em_verbatim` is a tag that appears literally.
-// If you got `traits`:     then you receive `(text...), _em_traits`. This text is pasted verbatim into the traits class. `_em_traits` is a tag that
-//                            appears literally. Note that this is the only entity kind that currently doesn't have a macro to directly emit it
-//                            from `EM_REFL(...)`. To me it looks that it only makes sense to emit it from here.
-// If you got `annotation`: then you receive `(category, error_if_unused, text...), _em_annotation`. This is a custom annotation that you can read here,
-//                            in your macro. For explanation of `category` and `error_if_unused` see `EM_REFL_ANNOTATE_LOW()`. `_em_annotation` is a tag
-//                            that appears literally.
+// Will preprocess the entire input sequence of `EM_REFL(...)` (including verbatim blocks and annotations, but excluding control statements),
+//   using those macros. Those are fed as parameters to `SF_FOR_EACH`.
+// On each iteration you'll receive one of the following entry kinds. You can emit it back as is, if you want to leave it unchanged.
+// You can emit more than one entry if you want, or nothing at all.
+// The input arrives without parentheses, so you must use multiple arguments. Your output must be parenthesized, add `(...)` yourself.
+// If you want to keep the current entry as is, you must emit it unchanged, but in parentheses.
+// There are following entry kinds. Notice that the first element of each is a literal tag that you can use for dispatch.
+//     (field, (type_ [,attrs_...]), name_ [,init_...])    // A field declaration.
+//     (verbatim, target_, tag_, metadata_, text_...)      // A verbatim text block.
+//                                                            Here `target_` is one of:
+//                                                              `body` - emitted in the class body, between the data memebrs.
+//                                                              `traits` - emitted in the internal traits class that's generated for this class.
+//     (annotation, category_, error_if_unused_, data_...) // An annotation, for use by external mixins. We ignore them, other than optionally
+//                                                              erroring if they are unused.
+//                                                            `category_` is a single word for dispatch, can be anything.
+//                                                            `error_if_unused_` is either empty or a string literal. If it's a string, it indicates that
+//                                                              this annotation is unused, and we'll error at preprocessing time with this message.
+//                                                              Set it to empty in your loop to mark the annotation as used.
+//                                                              It can also be set to empty from the very beginning, if the annotation is intended
+//                                                                to be silently ignored if unused.
 // NOTE: When writing nested loops, you must respect the `n` parameter as usual!
 // NOTE: Use `_em_refl_Self` to refer to the enclosing class.
 // Debugging hint: you can temporarily comment out `DETAIL_EM_REFL_3` below to see the result of the preprocessing pass when expanding `EM_REFL()`.
@@ -87,43 +91,64 @@ namespace em::Refl::Structs
 // Things that can appear between the members of `EM_REFL()`: [
 
 // Access modifiers for `EM_REFL(...)`.
-#define EM_PUBLIC    EM_REFL_VERBATIM_LOW(access, public   , public:   )
-#define EM_PRIVATE   EM_REFL_VERBATIM_LOW(access, private  , private:  )
-#define EM_PROTECTED EM_REFL_VERBATIM_LOW(access, protected, protected:)
+#define EM_PUBLIC    EM_REFL_VERBATIM_LOW(body, access, public   , public:   )
+#define EM_PRIVATE   EM_REFL_VERBATIM_LOW(body, access, private  , private:  )
+#define EM_PROTECTED EM_REFL_VERBATIM_LOW(body, access, protected, protected:)
 // Pastes a piece of code verbatim in `EM_REFL(...)`.
-#define EM_VERBATIM(...) EM_REFL_VERBATIM_LOW(user,, __VA_ARGS__)
+#define EM_VERBATIM(...) EM_REFL_VERBATIM_LOW(body, user,, __VA_ARGS__)
 
-// Like `EM_VERBATIM()`, but also lets you customize the tags that verbatim blocks have.
-// `...` gets pasted into the class verbatim.
-// `category_` is a single-word ID that roughly explains what this is.
-// `data_` can be anything, we don't access it directly.
-#define EM_REFL_VERBATIM_LOW(category_, data_, .../*verbatim*/) (category_,data_,__VA_ARGS__)(_em_verbatim)
+// An extended version of `EM_VERBATIM()`.
+// `target_` is where this text should be pasted. One of: `body` (class body), `traits` (the emitted traits class).
+// `tag_` is an arbitrary single-word tag.
+// `metadata_` is arbitrary data, not necessarily single-word.
+// `...` is the text that's inserted.
+#define EM_REFL_VERBATIM_LOW(target_, tag_, metadata_, .../*text*/) (verbatim, target_, tag_, metadata_, __VA_ARGS__)(_em_meta)
 // Inserts a custom annotation in `EM_REFL()`.
 // `category_` is a single-word ID that roughly explains what this is.
 // `error_if_unused_` is either empty or a string literal. If not empty, `EM_REFL()` will emit this error message if no one removes it from
 //   this annotation via `EM_REFL_PREPROCESS_LOW()`, which would indicate that the annotation is successfully consumed.
 // `...` can be anything, we don't access it directly.
-#define EM_REFL_ANNOTATE_LOW(category_, error_if_unused_, .../*data*/) (category_, error_if_unused_, __VA_ARGS__)(_em_annotation)
+#define EM_REFL_ANNOTATE_LOW(category_, error_if_unused_, .../*data*/) (annotation, category_, error_if_unused_, __VA_ARGS__)(_em_meta)
 
 // ]
 
 
-// --- Helpers for user modules, and for the internals:
-
-// Given the element name (or the argument where it would be), possibly followed by a comma and unspecified stuff after that,
-//   returns one of: `field`, `verbatim`, annotation`.
-#define EM_REFL_META_KIND(...) DETAIL_EM_REFL_META_KIND_1(__VA_ARGS__)
-#define DETAIL_EM_REFL_META_KIND_1(name_, ...) EM_VA_AT(1, EM_CAT(DETAIL_EM_REFL_META_KIND_2_, name_), field)
-#define DETAIL_EM_REFL_META_KIND_2__em_verbatim   x, verbatim
-#define DETAIL_EM_REFL_META_KIND_2__em_traits     x, traits
-#define DETAIL_EM_REFL_META_KIND_2__em_annotation x, annotation
-
-
 // --- Internals:
+
+// This is used to separate the leading control statements from the rest of the `EM_REFL(...)` input sequence.
+// Given a list `(,a)(,b)(,c)(d)(e)(f)`, inserts a comma to produce `(,a)(,b)(,c) , (d)(e)(f)`.
+// Either half can be empty, in that case the comma can be the first and/or the last thing in the return value.
+#define DETAIL_EM_REFL_SPLIT_LIST(seq_) EM_END(DETAIL_EM_REFL_SPLIT_LIST_LOOP_A seq_)
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A(...) DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_((__VA_ARGS__), EM_VA_FIRST(__VA_ARGS__))
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B(...) DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_((__VA_ARGS__), EM_VA_FIRST(__VA_ARGS__))
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0(...) (__VA_ARGS__) DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0(...) (__VA_ARGS__) DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_(x, ...) __VA_OPT__(,) x EM_CAT(DETAIL_EM_REFL_SPLIT_LIST_LOOP_B,__VA_OPT__(0))
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_(x, ...) __VA_OPT__(,) x EM_CAT(DETAIL_EM_REFL_SPLIT_LIST_LOOP_A,__VA_OPT__(0))
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_END ,
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_END ,
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0_END
+#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0_END
+
+// `seq` is the argument of `EM_REFL(...)` macro, minus the control statements that are already removed by `DETAIL_EM_REFL_SPLIT_LIST()`,
+//   and already preprocessed with `EM_SEQ_GROUP2()`, which converts `(a...)(b...)` to `((a...), b...)`.
+// This function converts the format of that to something more convenient for internal use.
+// Fields of the form `(type_ [,attrs_...])(name_ [,init_...])` become `(field, (type_ [,attrs_...]), name_ [,init_...])` (where `field` is inserted literally,
+//   it's not a placeholder).
+// Everything else is left as is, minus the `(_em_meta)` suffix. E.g. verbatim blocks become `(verbatim, target_, tag_ metadata_, text...)`,
+//   and similarly for annotations.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT(seq_) EM_END(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A seq_)
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A(...) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(__VA_ARGS__) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B(...) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(__VA_ARGS__) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A_END
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B_END
+// Here `...` can't be split into `name_, ...`, because we ahve to handle `name_` and `name_,` differently, see `DETAIL_EM_REFL_EMIT_MEMBERS()` below.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(parens_, ...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_CHECK, __VA_ARGS__)(parens_)((field, parens_, __VA_ARGS__))
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_CHECK_em_meta ,
 
 // The implementaiton of `EM_REFL(...)`.
 #define DETAIL_EM_REFL(...) DETAIL_EM_REFL_2(__VA_ARGS__)
-#define DETAIL_EM_REFL_2(control_, seq_) DETAIL_EM_REFL_3(SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_CONTROL_STEP, SF_STATE_EXPAND, (/*elems:*/EM_SEQ_GROUP2(seq_), /*enable member names:*/1), control_))
+#define DETAIL_EM_REFL_2(control_, seq_) DETAIL_EM_REFL_3(SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_CONTROL_STEP, SF_STATE_EXPAND, (/*elems:*/DETAIL_EM_REFL_ADJUST_SEQ_FORMAT(EM_SEQ_GROUP2(seq_)), /*enable member names:*/1), control_))
 #define DETAIL_EM_REFL_CONTROL_STEP(n, d, empty_, command_, ...) DETAIL_EM_REFL_CONTROL_STEP_1(command_, EM_IDENTITY d __VA_OPT__(,) __VA_ARGS__)
 #define DETAIL_EM_REFL_CONTROL_STEP_1(command_, ...) EM_CAT(DETAIL_EM_REFL_CONTROL_STEP_1_, command_)(__VA_ARGS__)
 #define DETAIL_EM_REFL_CONTROL_STEP_1__em_unnamed_members(seq_, enable_member_names_) (seq_, EM_IF_01(enable_member_names_)(0)(EM_FAIL("Duplicate `EM_UNNAMED_MEMEBRS`")))
@@ -134,29 +159,21 @@ namespace em::Refl::Structs
 // Having metadata before the members isn't an issue at all, because all the members are only named inside of functions, which can happen before they are declared.
 #define DETAIL_EM_REFL_4(seq_, enable_member_names_) DETAIL_EM_REFL_EMIT_METADATA(seq_, enable_member_names_) DETAIL_EM_REFL_EMIT_MEMBERS(seq_)
 
-#define DETAIL_EM_REFL_CONTROL(control_) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_CONTROL_STEP, SF_STATE, (1/*enable member names*/), control_)
-
 // Takes a member list (preprocessed with `EM_SEQ_GROUP2(...)`) and outputs the member declarations for it.
 #define DETAIL_EM_REFL_EMIT_MEMBERS(seq_) EM_END(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A seq_)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(p_type_attrs_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_, EM_REFL_META_KIND(__VA_ARGS__))(p_type_attrs_, __VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_field(p_type_attrs_, .../*name_ [,init_...]*/) ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_INITIALIZER(__VA_ARGS__))({});
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_verbatim(p_content_, ...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_verbatim_1(EM_IDENTITY p_content_)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_verbatim_1(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_verbatim_2(__VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_verbatim_2(category_, data_, .../*text*/) __VA_ARGS__
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_traits(...)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_annotation(p_content_, ...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_annotation_1(EM_IDENTITY p_content_)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_annotation_1(...) DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_annotation_2(__VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_annotation_2(category_, unused_error_message_, ...) EM_FAIL(unused_error_message_) // Does nothing if the message is empty.
-#define DETAIL_EM_REFL_INITIALIZER(unused_, ...) __VA_OPT__(= __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_, kind_)(__VA_ARGS__)
+// Note that this is written in a particular way, to handle `name` and `name,` differently. The former gets zeroed via `{}`, while the latter is left uninitialized. The user can use the latter for types that are not default-constructible, which they plan to initialize in the member init list.
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_field(p_type_attrs_, .../*init*/) ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_FIELD_INIT(__VA_ARGS__))({});
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_FIELD_INIT(unused, ...) __VA_OPT__(= __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_body(...) __VA_ARGS__
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_traits(...)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_annotation(category_, error_if_unused_, .../*data*/) EM_FAIL(error_if_unused_)
 
-// If `...` starts with `_em_verbatim`, returns `a`. Otherwise returns `b`.
-// `DETAIL_EM_REFL_IF_VERBATIM(...)(a)(b)`
-#define DETAIL_EM_REFL_IF_VERBATIM(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_IF_VERBATIM_, __VA_ARGS__)
-#define DETAIL_EM_REFL_IF_VERBATIM__em_verbatim ,
 
 // Generates metadata for a class. `seq_` is the list of members, preprocessed with `EM_SEQ_GROUP2(...)`.
 // `enable_named_members_` is 0 or 1, whether to generate the member name information.
@@ -207,35 +224,32 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(p_type_attrs_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_, EM_REFL_META_KIND(__VA_ARGS__))
+#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_, kind_)
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_field +1
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_verbatim
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_traits
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_annotation
 // A loop to emit `if constexpr (i == counter) return member; else` for all members, to return references to them.
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP, SF_NULL, 0, seq)
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, p_type_attrs_, name_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_, EM_REFL_META_KIND(name_))(counter_, name_)
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_field(counter_, name_) counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else
+#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_, kind_)(counter_, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_field(counter_, p_type_attrs_, name_, ...) counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_verbatim(counter_, ...) counter_
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_traits(counter_, ...) counter_
 #define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_annotation(counter_, ...) counter_
 // A loop to emit a list of lists of member types and attributes.
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(p_type_attrs_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_, EM_REFL_META_KIND(__VA_ARGS__))(p_type_attrs_)
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_field(p_type_attrs_) , ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>
+#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_, kind_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_field(p_type_attrs_, ...) , ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_verbatim(...)
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_traits(...)
 #define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_annotation(...)
 // A loop to emit a list of lists of member names.
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(p_type_attrs_, name_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_, EM_REFL_META_KIND(name_))(name_)
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_field(name_) #name_,
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_, kind_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_field(p_type_attr_, name_, ...) #name_,
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_verbatim(...)
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_traits(...)
 #define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_annotation(...)
@@ -244,22 +258,9 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A_END
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY(p_type_attrs_, name_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_, EM_REFL_META_KIND(name_))(EM_IDENTITY p_type_attrs_)
-#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_field(...)
-#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_verbatim(...)
-#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_traits(...) __VA_ARGS__
-#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_annotation(...)
-
-// Given a list `(,a)(,b)(,c)(d)(e)(f)`, inserts a comma to produce `(,a)(,b)(,c) , (d)(e)(f)`.
-// Either half can be empty, in that case the comma can be the first and/or the last thing in the return value.
-#define DETAIL_EM_REFL_SPLIT_LIST(seq_) EM_END(DETAIL_EM_REFL_SPLIT_LIST_LOOP_A seq_)
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A(...) DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_((__VA_ARGS__), EM_VA_FIRST(__VA_ARGS__))
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B(...) DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_((__VA_ARGS__), EM_VA_FIRST(__VA_ARGS__))
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0(...) (__VA_ARGS__) DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0(...) (__VA_ARGS__) DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_(x, ...) __VA_OPT__(,) x EM_CAT(DETAIL_EM_REFL_SPLIT_LIST_LOOP_B,__VA_OPT__(0))
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_(x, ...) __VA_OPT__(,) x EM_CAT(DETAIL_EM_REFL_SPLIT_LIST_LOOP_A,__VA_OPT__(0))
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A_END ,
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B_END ,
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_A0_END
-#define DETAIL_EM_REFL_SPLIT_LIST_LOOP_B0_END
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_, kind_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_field(...)
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_body(...)
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_traits(...) __VA_ARGS__
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_annotation(...)
