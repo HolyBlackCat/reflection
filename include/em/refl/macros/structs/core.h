@@ -8,7 +8,6 @@
 #include "em/macros/meta/detectable_base.h"
 #include "em/macros/meta/enclosing_class.h"
 #include "em/macros/meta/if_else.h"
-#include "em/macros/meta/indexing.h"
 #include "em/macros/meta/ranges.h"
 #include "em/macros/meta/sequence_for.h"
 #include "em/macros/utils/forward.h"
@@ -19,6 +18,7 @@
 #include <array> // IWYU pragma: keep, used in the macros.
 #include <cstddef> // IWYU pragma: keep, used in the macros.
 #include <string_view> // IWYU pragma: keep, used in the macros.
+#include <type_traits> // IWYU pragma: keep, used in the macros.
 
 
 namespace em::Refl::Structs
@@ -28,6 +28,9 @@ namespace em::Refl::Structs
         // Given a `type, attributes...` list (as accepted by `EM_REFL`), returns the `type` from it.
         template <typename Type, Attribute ...Attrs>
         using MemberType = Type;
+
+        template <typename Derived>
+        constexpr void _adl_em_InheritanceHook(void *) {} // Dummy ADL target.
     }
 }
 
@@ -172,12 +175,14 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_body(...) __VA_ARGS__
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_traits(...)
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_inheritance_hook(...)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_annotation(category_, error_if_unused_, .../*data*/) EM_FAIL(error_if_unused_)
 
 
 // Generates metadata for a class. `seq_` is the list of members, preprocessed with `EM_SEQ_GROUP2(...)`.
 // `enable_named_members_` is 0 or 1, whether to generate the member name information.
-#define DETAIL_EM_REFL_EMIT_METADATA(seq_, enable_named_members_) \
+#define DETAIL_EM_REFL_EMIT_METADATA(seq_, enable_member_names_) DETAIL_EM_REFL_EMIT_METADATA_2(seq_, enable_member_names_, (EM_END(DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_A seq_)))
+#define DETAIL_EM_REFL_EMIT_METADATA_2(seq_, enable_named_members_, inheritance_hook_body_) \
     /* Typedef the enclosing class. */\
     EM_TYPEDEF_ENCLOSING_CLASS(_em_refl_Self) \
     \
@@ -186,7 +191,7 @@ namespace em::Refl::Structs
     \
     struct _em_refl_Traits \
     { \
-        /* Member count. This is a fan */\
+        /* Member count. */\
         static constexpr int num_members = 0 EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
         /* A getter for the members. */\
         /* Here we return a reference, but custom classes can also return by value here. */\
@@ -212,12 +217,18 @@ namespace em::Refl::Structs
                 return _em_array[::std::size_t(_em_i)]; \
             } \
         )() \
-        /* [optional] Lastly, emit any custom traits the user specified via `_em_traits`. */\
+        /* --- The stuff below is not customization points, don't add it to your own traits. */\
+        /* Emit any custom traits the user specified via `EM_REFL_VERBATIM_LOW()`. */\
         EM_END(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A seq_) \
     }; \
+    /* This function is used to obtain traits for a class. */\
     /* We're currently using `same_ignoring_cvref<Self>` to reject derived types. */\
     /* Replacing this with `_em_refl_Self` would allow derived types, but that seems to be worse. */\
-    friend constexpr _em_refl_Traits _adl_em_refl_Struct(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) {return {};}
+    friend constexpr _em_refl_Traits _adl_em_refl_Struct(int/*AdlDummy*/, const ::em::Meta::same_ignoring_cvref<_em_refl_Self> auto *) {return {};}\
+    /* Optionally, a hook that's called by the derived classes. */\
+    DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK(EM_END(DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_A seq_))\
+    /* Now poke the hook from any of the base classes. This will poke this class itself as well, that's why it's after the hook. */\
+    DETAIL_EM_REFL_TRIGGER_INHERITANCE_HOOK
 
 // A loop to count the members.
 #define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B
@@ -263,4 +274,47 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_body(...)
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_traits(...) __VA_ARGS__
+#define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_VERBATIM_inheritance_hook(...)
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY_KIND_annotation(...)
+// A loop emit custom user-provided code into the inheritance hook.
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_A(...) DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_B
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_B(...) DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_A
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_A_END
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_B_END
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_KIND_, kind_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_KIND_field(...)
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_VERBATIM_body(...)
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_VERBATIM_traits(...)
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_VERBATIM_inheritance_hook(...) __VA_ARGS__
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK_LOOP_BODY_KIND_annotation(...)
+// The inheritance hook itself. This is only emitted if the contents are non-empty.
+#define DETAIL_EM_REFL_EMIT_INHERITANCE_HOOK(...) \
+    __VA_OPT__(\
+        /* Would making this a lambda a work? A function is generally more reliable (ensures the enclosing class is complete in the body), */\
+        /* so it's easier to keep this a function. */\
+        template <typename _em_Derived> static ::std::nullptr_t _em_InheritanceHook_Func() {__VA_ARGS__ return nullptr;} \
+        template <typename _em_Derived> inline static const ::std::nullptr_t _em_InheritanceHook_Var = _em_InheritanceHook_Func<_em_Derived>(); \
+        /* Now an ADL target. */\
+        template <\
+            typename _em_Derived, \
+            /* Confirm that this is inheritance. We're using `is_base_of` instead of `derived_from` here, just in case. */\
+            /* E.g. in case the base is a tag we can inherit multiple times from? The user should check `derived_from` themselves, */\
+            /* or accept an error on ambiguity. */\
+            ::std::enable_if_t<::std::is_base_of_v<_em_refl_Self, _em_Derived>, ::std::nullptr_t> = nullptr, \
+            /* Instantiate the variable. */\
+            auto = &_em_InheritanceHook_Var<_em_Derived>, \
+            /* This condition is always false. */\
+            ::std::enable_if_t<::em::Meta::always_false<_em_Derived>, std::nullptr_t> = nullptr \
+        > \
+        friend constexpr void _adl_em_InheritanceHook(void *) {} \
+    )
+
+// Trigger the inheritance hook in the base classes, and in this class itself.
+#define DETAIL_EM_REFL_TRIGGER_INHERITANCE_HOOK \
+    static void _em_TriggerInheritanceHook() \
+    { \
+        using ::em::Refl::Structs::detail::Macros::_adl_em_InheritanceHook; \
+        _adl_em_InheritanceHook<_em_refl_Self>((_em_refl_Self *)nullptr);\
+    } \
+    static constexpr ::std::integral_constant<void (*)(), _em_TriggerInheritanceHook> _em_TriggerInheritanceHookVar{};
