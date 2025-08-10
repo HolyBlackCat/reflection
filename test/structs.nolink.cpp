@@ -1,5 +1,5 @@
 #include "em/refl/macros/structs.h"
-#include "em/refl/access/structs/core.h"
+#include "em/refl/access/structs.h"
 
 class A
 {

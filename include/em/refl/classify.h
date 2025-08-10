@@ -4,7 +4,7 @@
 #include "em/refl/access/bases.h"
 #include "em/refl/access/indirect.h"
 #include "em/refl/access/ranges.h"
-#include "em/refl/access/structs/core.h"
+#include "em/refl/access/structs.h"
 #include "em/refl/access/variants.h"
 
 namespace em::Refl
