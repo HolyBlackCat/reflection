@@ -92,7 +92,7 @@ namespace em::Refl::StaticVirtual
 #define DETAIL_EM_STATIC_VIRTUAL_2(seq_) ), seq_)
 
 #define DETAIL_EM_STATIC_VIRTUAL_3(n, interface_name_, cond_, seq_) \
-    (verbatim, body, em_static_virtual,, \
+    EM_REFL_VERBATIM_LOW(body, em_static_virtual,, \
         struct interface_name_ \
         { \
             using _em_IsStaticVirtuallInterface = void; /* Mark the class so we know it's a valid interface. */\
@@ -105,7 +105,7 @@ namespace em::Refl::StaticVirtual
             EM_END(DETAIL_EM_REGISTER_DERIVED_BODY_IMPL_A seq_) \
         }; \
         EM_REFL_INHERITANCE_HOOK(EM_CAT(em_register_derived_, interface_name_), cond_, ::em::Refl::StaticVirtual::detail::RegisterDerived<interface_name_, _em_Derived, EM_CAT(_em_RegisterDerivedImpl, interface_name_)<_em_Derived>>();)\
-    )(_em_meta)
+    )
 
 #define DETAIL_EM_REGISTER_DERIVED_BODY_INTERFACE_A(name_, ...) EM_SILENCE_UNUSED_ATTRIBUTE( [[nodiscard]] ) virtual auto name_ DETAIL_EM_REGISTER_DERIVED_INJECT_CONST __VA_ARGS__ = 0; DETAIL_EM_REGISTER_DERIVED_BODY_INTERFACE_B
 #define DETAIL_EM_REGISTER_DERIVED_BODY_INTERFACE_B(...) DETAIL_EM_REGISTER_DERIVED_BODY_INTERFACE_A
