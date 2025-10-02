@@ -54,7 +54,7 @@ namespace em::Refl
                     // Work around Clang bug: https://github.com/llvm/llvm-project/issues/61426
                     // Don't be confused by the ticket name, it apparently applies here.
                     // This isn't fixed in trunk yet at the time of writing, so the version condition might need to be bumped.
-                    #if EM_IS_CLANG_VERSION(<= 20)
+                    #if EM_IS_CLANG_VERSION(<= 21)
                     if constexpr (!bool(Flags & IterationFlags::ignore_root))
                     if constexpr (Pred::template type<T &&>::value) // Sic, stacking conditions.
                     #endif
