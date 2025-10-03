@@ -45,7 +45,9 @@ static_assert(em::Meta::lists_have_same_elems_and_size<em::Refl::Bases::AllBases
 
 // 1. Direct ambiguous base is skipped.
 struct X1 : AA::A {EM_REFL()};
-struct X2 : X1, AA::A {}; // Yes, Clang warns here. The warning can't be disabled.
+EM_SILENCE_INACCESSIBLE_BASE(
+struct X2 : X1, AA::A {};
+)
 static_assert(em::Meta::lists_have_same_elems_and_size<em::Refl::Bases::NonVirtualBasesDirect<X2>, em::Meta::TypeList<X1>>);
 
 // Both virtual and non-virtual base with the same name causes the virtual one to get skipped.
