@@ -8,7 +8,7 @@
 #include <utility>
 
 // This file handles optionals, pointers (smart and dumb), etc.
-// It also happens non-nullable indirect types, like iterators.
+// It also happens to handle non-nullable indirect types, like iterators.
 //   (For iterators, apparently default-constructed iterators are required to compare equal to each other, but they are not required to compare
 //   unequal to other iterators. Even though I think that should always be the case in practice for forward iterators or stronger (e.g. it's not the case
 //   for `std::istream_iterator`s, which are input iterators), I'm not doing that right now, just in case.)
