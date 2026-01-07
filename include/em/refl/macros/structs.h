@@ -8,12 +8,14 @@
 #include "em/macros/meta/detectable_base.h"
 #include "em/macros/meta/enclosing_class.h"
 #include "em/macros/meta/if_else.h"
+#include "em/macros/meta/optional_parens.h"
 #include "em/macros/meta/ranges.h"
 #include "em/macros/meta/sequence_for.h"
 #include "em/macros/utils/forward.h"
 #include "em/meta/common.h" // IWYU pragma: keep, used in the macros.
 #include "em/meta/lists.h" // IWYU pragma: keep, used in the macros.
 #include "em/refl/common.h"
+#include "em/zstring_view.h"
 
 #include <array> // IWYU pragma: keep, used in the macros.
 #include <cstddef> // IWYU pragma: keep, used in the macros.
@@ -31,6 +33,15 @@ namespace em::Refl::Structs
 
         template <typename Derived>
         constexpr void _adl_em_InheritanceHook(void *) {} // Dummy ADL target.
+
+        template <bool IsConst, typename Type, Attribute ...Attrs>
+        constexpr auto &MaybeMakeConst(auto &value)
+        {
+            if constexpr (IsConst && !std::is_reference_v<Type>)
+                return std::as_const(value);
+            else
+                return value;
+        }
     }
 }
 
@@ -43,10 +54,23 @@ namespace em::Refl::Structs
  *           EM_PUBLIC                    // Access modifiers.
  *             (type)(name, 42)           // With initializer.
  *             (type, attr1, attr2)(name) // With attributes. Those are types derived from `em::Refl::BasicAttribute`. The initializer is allowed here too of course.
+ *
+ *             (type)(static name)        // Static variables.
+ *             (type)(inline static name) // Inline static variables.
+ *
+ *             ((mutable) type)(name)     // Adding custom stuff to the field declaration.
+ *             ((whatever...) type)(inline static name) // This can be used on static variables too.
+ *                 // `inline` before `static` is similar to inserting it in `(...)`, except it also prevents `static` from removing the `{}` default initializer.
+ *                 // `static` before the name behaves differently compared to inserting it in `(...)`, since it also marks the variable as static for reflection purposes.
+ *
+ *             EM_VERBATIM(text...) // Inserts the text literally.
+ *                 // Something similarl is used by `EM_PUBLIC` and others internally.
+ *                 // There's usually no point in using this, as you could just place the text outside of the macro, unless you're using the terse `EM_STRUCT`/`EM_CLASS` macros.
  *         )
  *     }
  *
  * The default initializer is `{}`. Use `(name,)` to remove any initializer (e.g. if the type is not default-constructible).
+ * The initializer is automatically removed from static non-inline variables.
  *
  * Before any members, you can specify zero or more control statements, such as `EM_UNNAMED_MEMBERS`,
  *   or any custom statements that you can implement yourself in terms of `EM_REFL_PREPROCESS_LOW()`.
@@ -72,19 +96,23 @@ namespace em::Refl::Structs
 // The input arrives without parentheses, so you must use multiple arguments. Your output must be parenthesized, add `(...)` yourself.
 // If you want to keep the current entry as is, you must emit it unchanged, but in parentheses.
 // There are following entry kinds. Notice that the first element of each is a literal tag that you can use for dispatch.
-//     (field, (type_ [,attrs_...]), name_ [,init_...])    // A field declaration.
-//     (verbatim, target_, tag_, metadata_, text_...)      // A verbatim text block.
-//                                                            Here `target_` is one of:
-//                                                              `body` - emitted in the class body, between the data memebrs.
-//                                                              `traits` - emitted in the internal traits class that's generated for this class.
-//     (annotation, category_, error_if_unused_, data_...) // An annotation, for use by external mixins. We ignore them, other than optionally
-//                                                              erroring if they are unused.
-//                                                            `category_` is a single word for dispatch, can be anything.
-//                                                            `error_if_unused_` is either empty or a string literal. If it's a string, it indicates that
-//                                                              this annotation is unused, and we'll error at preprocessing time with this message.
-//                                                              Set it to empty in your loop to mark the annotation as used.
-//                                                              It can also be set to empty from the very beginning, if the annotation is intended
-//                                                                to be silently ignored if unused.
+//     (field, static_, (type_ [,attrs_...]), (decl_seq_verbatim_...), name_ [,init_...])
+//         A field declaration.
+//         `static_` is either `static` or empty.
+//         `decl_seq_verbatim_...` gets pasted before the declaration verbatim, it's for stuff like `inline` on static variables, etc.
+//     (verbatim, target_, tag_, metadata_, text_...)
+//         A verbatim text block.
+//         Here `target_` is one of:
+//           `body` - emitted in the class body, between the data memebrs.
+//           `traits` - emitted in the internal traits class that's generated for this class.
+//     (annotation, category_, error_if_unused_, data_...)
+//         An annotation, for use by external mixins. We ignore them, other than optionally erroring if they are unused.
+//         `category_` is a single word for dispatch, can be anything.
+//         `error_if_unused_` is either empty or a string literal. If it's a string, it indicates that
+//           this annotation is unused, and we'll error at preprocessing time with this message.
+//           Set it to empty in your loop to mark the annotation as used.
+//           It can also be set to empty from the very beginning, if the annotation is intended
+//                                                                                               to be silently ignored if unused.
 // NOTE: When writing nested loops, you must respect the `n` parameter as usual!
 // NOTE: Use `_em_Self` to refer to the enclosing class.
 // Debugging hint: you can temporarily comment out `DETAIL_EM_REFL_3` below to see the result of the preprocessing pass when expanding `EM_REFL()`.
@@ -182,18 +210,71 @@ namespace em::Refl::Structs
 // `seq` is the argument of `EM_REFL(...)` macro, minus the control statements that are already removed by `DETAIL_EM_REFL_SPLIT_LIST()`,
 //   and already preprocessed with `EM_SEQ_GROUP2()`, which converts `(a...)(b...)` to `((a...), b...)`.
 // This function converts the format of that to something more convenient for internal use.
-// Fields of the form `(type_ [,attrs_...])(name_ [,init_...])` become `(field, (type_ [,attrs_...]), name_ [,init_...])` (where `field` is inserted literally,
-//   it's not a placeholder).
-// Everything else is left as is, minus the `(_em_meta)` suffix. E.g. verbatim blocks become `(verbatim, target_, tag_ metadata_, text...)`,
+// Fields of the form `( [(decl_seq_verbatim_...)] type_ [,attrs_...] )( [[inline] static] name_ [,init_...] )` (which `EM_SEQ_GROUP2()` first convers to `((type_etc...), name_etc...)`)
+//   become `(field, [static], (type_ [,attrs_...]), (decl_seq_verbatim_... [inline]), name_ [,init_...])`, where:
+//   `field` is inserted literally, it's not a placeholder;
+//   `static` is either inserted literally or is omitted,
+//   `decl_seq_verbatim_...` is the part that's inserted onto the variable declaration verbatim.
+// Everything else is left as is, minus the `(_em_meta)` suffix, i.e. `(...)(_em_meta)` becomes just `(...)`. E.g. verbatim blocks become `(verbatim, target_, tag_ metadata_, text...)`,
 //   and similarly for annotations.
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT(seq_) EM_END(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A seq_)
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A(...) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(__VA_ARGS__) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B(...) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(__VA_ARGS__) DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_A_END
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_LOOP_B_END
-// Here `...` can't be split into `name_, ...`, because we ahve to handle `name_` and `name_,` differently, see `DETAIL_EM_REFL_EMIT_MEMBERS()` below.
-#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(parens_, ...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_CHECK, __VA_ARGS__)(parens_)((field, parens_, __VA_ARGS__))
+// Here `...` can't be split into `name_, ...`, because we have to handle `name_` and `name_,` differently, see `DETAIL_EM_REFL_EMIT_MEMBERS()` below.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY(parens_, ...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_CHECK, __VA_ARGS__)(parens_ EM_EMPTY)(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_FIELD) (parens_, __VA_ARGS__)
 #define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_CHECK_em_meta ,
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_FIELD(p_type_attrs_, .../*name_, init_...*/) \
+    DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_FIELD_2( \
+        (EM_TRY_SKIP_PARENS(EM_IDENTITY p_type_attrs_)), \
+        (EM_TRY_ONLY_PARENS(EM_IDENTITY p_type_attrs_)), \
+        DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_STATIC(__VA_ARGS__), \
+        DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_INLINE(__VA_ARGS__), \
+        DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_STATIC(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_INLINE(__VA_ARGS__)) \
+    )
+// Among other things, this removes the initializer from static non-inline variables (assuming `inline` was specified directly, and not through `p_decl_seq_verbatim_`, which is impossible to detect).
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_BODY_FIELD_2(p_type_attrs_, p_decl_seq_verbatim_, static_, inline_, .../*name_, init_...*/) \
+    ( \
+        field, \
+        static_, \
+        p_type_attrs_, \
+        (EM_IDENTITY p_decl_seq_verbatim_ inline_), \
+        DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_FIX_STATIC_INIT(static_, inline_, __VA_ARGS__) \
+    )
+
+// This is a helper for `DETAIL_EM_REFL_ADJUST_SEQ_FORMAT()` above.
+// `static_` is either `static` or empty.
+// `inline_` is either `static` or empty.
+// Normally returns `...` (which is `name_ [, init_...]`) as is. But if `static_` is specified and `inline_` is not, and `init_...` isn't specified, then ensures there's a comma after `name_`.
+// That comma disables the default `{}` initializer, so the point of this is to ensure that we don't try to apply `{}` to non-inline static variables, which is a compilation error.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_FIX_STATIC_INIT(static_, inline_, .../*name_, init_...*/) EM_IF_COMMA(__VA_ARGS__)(__VA_ARGS__)(EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_FIX_STATIC_INIT_CHECK_, EM_CAT(static_, inline_))(__VA_ARGS__,)(__VA_ARGS__))
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_FIX_STATIC_INIT_CHECK_static ,
+
+// This is a helper for `DETAIL_EM_REFL_ADJUST_SEQ_FORMAT()` above.
+// If `...` starts with `[inline] static`, then returns `static`, otherwise returns empty.
+// This can handle commas in the input just fine.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_STATIC(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_STATIC_CHECK_, DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_INLINE(__VA_ARGS__))(static)()
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_STATIC_CHECK_static ,
+
+// This is a helper for `DETAIL_EM_REFL_ADJUST_SEQ_FORMAT()` above.
+// If `...` starts with `inline`, then returns `inline`, otherwise returns empty.
+// This can handle commas in the input just fine.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_INLINE(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_INLINE_CHECK_, __VA_ARGS__)(inline)()
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_INLINE_CHECK_inline ,
+
+// This is a helper for `DETAIL_EM_REFL_ADJUST_SEQ_FORMAT()` above.
+// If `...` starts with the word `static`, then removes it. Otherwise leaves the input unchanged.
+// This can handle commas in the input just fine.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_STATIC(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_STATIC_CHECK_, __VA_ARGS__)(EM_VCAT(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_STATIC_REMOVE_, __VA_ARGS__))(__VA_ARGS__)
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_STATIC_REMOVE_static
+
+// This is a helper for `DETAIL_EM_REFL_ADJUST_SEQ_FORMAT()` above.
+// If `...` starts with the word `inline`, then removes it. Otherwise leaves the input unchanged.
+// This can handle commas in the input just fine.
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_INLINE(...) EM_IF_CAT_ADDS_COMMA(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_EXTRACT_INLINE_CHECK_, __VA_ARGS__)(EM_VCAT(DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_INLINE_REMOVE_, __VA_ARGS__))(__VA_ARGS__)
+#define DETAIL_EM_REFL_ADJUST_SEQ_FORMAT_REMOVE_INLINE_REMOVE_inline
+
 
 // The implementaiton of `EM_REFL(...)`.
 #define DETAIL_EM_REFL(...) DETAIL_EM_REFL_2(__VA_ARGS__)
@@ -220,7 +301,7 @@ namespace em::Refl::Structs
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_B_END
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_, kind_)(__VA_ARGS__)
 // Note that this is written in a particular way, to handle `name` and `name,` differently. The former gets zeroed via `{}`, while the latter is left uninitialized. The user can use the latter for types that are not default-constructible, which they plan to initialize in the member init list.
-#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_field(p_type_attrs_, .../*init*/) ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_FIELD_INIT(__VA_ARGS__))({});
+#define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_field(static_, p_type_attrs_, p_decl_seq_verbatim_, .../*name, init...*/) EM_IDENTITY p_decl_seq_verbatim_ static_ ::em::Refl::Structs::detail::Macros::MemberType<EM_IDENTITY p_type_attrs_> EM_VA_FIRST(__VA_ARGS__) EM_IF_COMMA(__VA_ARGS__)(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_FIELD_INIT(__VA_ARGS__))({});
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_FIELD_INIT(unused, ...) __VA_OPT__(= __VA_ARGS__)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_KIND_verbatim(target_, tag_, metadata_, .../*text*/) EM_CAT(DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_, target_)(__VA_ARGS__)
 #define DETAIL_EM_REFL_EMIT_MEMBERS_LOOP_BODY_VERBATIM_body(...) __VA_ARGS__
@@ -229,7 +310,8 @@ namespace em::Refl::Structs
 
 
 // Generates metadata for a class, the part of it that appears before the data members.
-#define DETAIL_EM_REFL_EMIT_METADATA_PRE(seq_, enable_member_names_) \
+#define DETAIL_EM_REFL_EMIT_METADATA_PRE(seq_, enable_member_names_) DETAIL_EM_REFL_EMIT_METADATA_PRE_2(seq_, enable_member_names_, SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP, SF_STATE, DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA, seq_))
+#define DETAIL_EM_REFL_EMIT_METADATA_PRE_2(seq_, enable_member_names_, traits_data_) \
     /* Typedef the enclosing class. This is intentionally not prefixed with `refl`, because it can appear in the user-written inheritance hooks, */\
     /* and I don't want to spell `refl` every time. The reflection is kinda privileged, so I don't see a problem with not prefixing it specifically */\
     /* in the reflection. */\
@@ -240,32 +322,9 @@ namespace em::Refl::Structs
     \
     struct _em_refl_Traits \
     { \
-        /* Member count. */\
-        static constexpr int num_members = 0 EM_END(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A seq_); \
-        /* A getter for the members. */\
-        /* Here we return a reference, but custom classes can also return by value here. */\
-        template <int _em_I> \
-        static constexpr auto &&GetMember(auto &&_em_self) \
-        { \
-            DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq_) \
-            static_assert(::em::Meta::always_false<decltype(_em_self), ::em::Meta::ValueTag<_em_I>>, "Member index is out of range."); \
-        } \
-        /* [optional] Return something with `::type` to indicate a member type (omit or `void` to guess),
-        // and with `::attrs` with a type list of attributes (the list can be any variadic template, omit if no attributes). */\
-        template <int _em_I> \
-        static constexpr auto GetMemberInfo() \
-        { \
-            return ::em::Meta::list_type_at<::em::Meta::TypeList<EM_REMOVE_LEADING_COMMA(EM_END(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A seq_))>, _em_I>{}; \
-        } \
-        /* [optional] Return the member name. Omit the function to indicate the lack of names. */\
-        /* Currently the convention is to return null-terminated strings. The library itself doesn't use that for anything, but that's heavily recommended. */\
-        EM_IF_01(enable_member_names_)( \
-            static constexpr ::std::string_view GetMemberName(int _em_i) \
-            { \
-                static constexpr ::std::array<::std::string_view, num_members> _em_array = { EM_END(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A seq_) }; \
-                return _em_array[::std::size_t(_em_i)]; \
-            } \
-        )() \
+        /* Static and non-static data members. This emits two structs: `_em_NonStatic` and `_em_Static` for non-static and static members respectively. */\
+        /* See `DETAIL_EM_REFL_EMIT_METADATA_STRUCTS()` for the contents of those structs. */\
+        DETAIL_EM_REFL_EMIT_METADATA_STRUCTS(enable_member_names_, EM_IDENTITY traits_data_) \
         /* --- The stuff below is not customization points, don't add it to your own traits. */\
         /* Emit any custom traits the user specified via `EM_REFL_VERBATIM_LOW()`. */\
         EM_END(DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A seq_) \
@@ -280,39 +339,78 @@ namespace em::Refl::Structs
     /* Poke the inheritance hook from any of the base classes. This is at the end just in case.*/\
     DETAIL_EM_REFL_TRIGGER_INHERITANCE_HOOK
 
-// A loop to count the members.
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_A_END
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_, kind_)
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_field +1
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_verbatim
-#define DETAIL_EM_REFL_EMIT_METADATA_COUNT_LOOP_BODY_annotation
-// A loop to emit `if constexpr (i == counter) return member; else` for all members, to return references to them.
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP(seq) SF_FOR_EACH(SF_NULL, DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP, SF_NULL, 0, seq)
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP(n, counter_, kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_, kind_)(counter_, __VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_field(counter_, p_type_attrs_, name_, ...) counter_+1, if constexpr (_em_I == counter_) return EM_FWD(_em_self).name_; else
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_verbatim(counter_, ...) counter_
-#define DETAIL_EM_REFL_EMIT_METADATA_GETMEMBER_LOOP_STEP_annotation(counter_, ...) counter_
-// A loop to emit a list of lists of member types and attributes.
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_A_END
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_, kind_)(__VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_field(p_type_attrs_, ...) , ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_verbatim(...)
-#define DETAIL_EM_REFL_EMIT_METADATA_ATTRS_LOOP_BODY_annotation(...)
-// A loop to emit a list of lists of member names.
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_A_END
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_B_END
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY(kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_, kind_)(__VA_ARGS__)
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_field(p_type_attr_, name_, ...) #name_,
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_verbatim(...)
-#define DETAIL_EM_REFL_EMIT_METADATA_NAMES_LOOP_BODY_annotation(...)
+// This is a helper for the loop below, used to iterate over static and non-static data members.
+// `static_` is either `static` or empty.
+// `d` is the state for non-static and static members respectively: `((nonstatic_state...), (static_state...))`.
+// This macro modifies `d` as explained and returns the updated version.
+// `m` is a macro from `(is_static_, state..., ...)`. It receives either `0` or `1` as the first argument (1 if `static_`), then `[non]static_state...` (chosen based on `static_`),
+//   and then receives `...` as passed to this macro.
+// `m` must returns the updated `[non]static_state...`, which replaces the original in `d`, and then this macro returns the modified `d`.
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC(static_, d, m, ...) DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC_2(static_, EM_IDENTITY d, m, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC_2(static_, d_nonstatic_, d_static_, m, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC_SELECT_, static_)(d_nonstatic_, d_static_, m, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC_SELECT_(d_nonstatic_, d_static_, m, ...) ((EM_CALL(m, 0/*not static*/, EM_IDENTITY d_nonstatic_, __VA_ARGS__)), d_static_)
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC_SELECT_static(d_nonstatic_, d_static_, m, ...) (d_nonstatic_, (EM_CALL(m, 1/*not static*/, EM_IDENTITY d_static_, __VA_ARGS__)))
+
+// This is the initial `data` variable for the loop below, which is used to fill traits for static and non-static data members.
+// Here we just repeat `DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA_MAYBE_STATIC` twice, in parenthesis.
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA (DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA_MAYBE_STATIC/*non-static*/, DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA_MAYBE_STATIC/*static*/)
+// This is the initial state that's used separately for static and non-static data members.
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA_MAYBE_STATIC (0/*member count*/, (/*getmember*/), (/*attrs*/), (/*names*/))
+
+// The loop step for a loop that accumulates the necessary data to emit class member traits.
+// This same loop should have data set to `DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_INITIAL_DATA`, and final set to `SF_STATE`.
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP(n, d, kind_, ...) EM_CAT(DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_SELECT_, kind_)(d, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_SELECT_field(d, static_, ...) DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_DISPATCH_STATIC(static_, d, DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_FIELD, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_SELECT_verbatim(d, ...) d
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_SELECT_annotation(d, ...) d
+#define DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP_FIELD(is_static_, d_member_count_, d_getmember_, d_attrs_, d_names_, p_type_attrs_, p_decl_seq_verbatim_, name_, ...) \
+    d_member_count_+1, \
+    /* `MaybeMakeConst()` has to be here instead of in the API built on top of the traits, since it's up to the implementer of the traits to decide if they should propagate constness or not. */\
+    (EM_IDENTITY d_getmember_ if constexpr (_em_I == d_member_count_) return EM_IF_01(is_static_)(::em::Refl::Structs::detail::Macros::MaybeMakeConst<_em_IsConst, EM_IDENTITY p_type_attrs_>(name_))(EM_FWD(_em_self).name_); else), \
+    (EM_IDENTITY d_attrs_ , ::em::Refl::MemberInfo<EM_IDENTITY p_type_attrs_>), \
+    (EM_IDENTITY d_names_ #name_,) \
+
+// This is used to emit the combined static and non-static member traits.
+// `enable_member_names_` is 0 or 1 (only applies to non-static members for now, static ones could have a separate flag, but I didn't need it yet).
+// `...` is the data returned by the loop using `DETAIL_EM_REFL_EMIT_METADATA_MAKETRAITS_STEP`. It's basically `EM_IDENTITY (nonstatic..., static...)`
+#define DETAIL_EM_REFL_EMIT_METADATA_STRUCTS(enable_member_names_, ...) DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_2(enable_member_names_, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_2(enable_member_names_, nonstatic_, static_) \
+    DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_3(0/*not static*/, enable_member_names_, _em_NonStatic, EM_IDENTITY nonstatic_) \
+    DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_3(1/*static*/, 1/*always enable names for static for now*/, _em_Static, EM_IDENTITY static_)
+#define DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_3(is_static_, enable_member_names_, struct_name_, ...) DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_4(is_static_, enable_member_names_, struct_name_, __VA_ARGS__)
+#define DETAIL_EM_REFL_EMIT_METADATA_STRUCTS_4(is_static_, enable_member_names_, struct_name_, d_member_count_, d_getmember_, d_attrs_, d_names_) \
+    struct struct_name_ \
+    { \
+        /* Member count. */\
+        static constexpr int num_members = d_member_count_; \
+        /* A getter for the members. */\
+        /* Here we return a reference, but custom classes can also return by value here. */\
+        /* The function parameter is only there in non-static traits. */\
+        /* The template parameters have an extra bool parameter for static members, to control constness. */\
+        template <int _em_I EM_IF_01(is_static_)(, bool _em_IsConst)()> \
+        static constexpr auto &&GetMember( EM_IF_01(is_static_)()(auto &&_em_self) ) \
+        { \
+            EM_IDENTITY d_getmember_ \
+            static_assert(::em::Meta::always_false<EM_IF_01(is_static_)()(decltype(_em_self),) ::em::Meta::ValueTag<_em_I>>, "Member index is out of range."); \
+        } \
+        /* [optional] Return something with `::type` to indicate a member type (omit or `void` to guess),
+        // and with `::attrs` with a type list of attributes (the list can be any variadic template, omit if no attributes). */\
+        template <int _em_I> \
+        static constexpr auto GetMemberInfo() \
+        { \
+            return ::em::Meta::list_type_at<::em::Meta::TypeList<EM_REMOVE_LEADING_COMMA(EM_IDENTITY d_attrs_)>, _em_I>{}; \
+        } \
+        /* [optional] Return the member name. Omit the function to indicate the lack of names. */\
+        /* Currently there's no way to disable this for static members with `EM_REFL()`. */\
+        EM_IF_01(enable_member_names_)( \
+            static constexpr ::em::zstring_view GetMemberName(int _em_i) \
+            { \
+                static constexpr ::std::array<::em::zstring_view, num_members> _em_array = {EM_IDENTITY d_names_}; \
+                return _em_array[::std::size_t(_em_i)]; \
+            } \
+        )() \
+    }; \
+
 // A loop emit custom user-provided code into the traits class.
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A(...) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_B
 #define DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_B(...) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_BODY(__VA_ARGS__) DETAIL_EM_REFL_EMIT_METADATA_TRAITS_LOOP_A
