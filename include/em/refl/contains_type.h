@@ -8,6 +8,7 @@
 
 // `em::Refl::TypeRecursivelyContainsElemCvref` recursively checks that a type contains some other type.
 // This could be implemented in terms of `VisitTypes` from `em/refl/visit_types.h`, but that has worse compilation times.
+// Note: This only checks non-static members!
 
 namespace em::Refl
 {
@@ -91,6 +92,7 @@ namespace em::Refl
     // If `T` is a non-reference, `&&` is added automatically.
     // The `Filter` predicate prevents recursion into the types for which it returns false. Also it overrides the `Pred` predicate:
     //   if `Filter` returns false, the `Pred` predicate isn't checked for this type.
+    // Note: This only checks non-static members!
     template <typename T, typename/*TypePredicate*/ Pred, typename/*TypePredicate*/ Filter = Meta::true_predicate>
     concept TypeRecursivelyContainsPred = detail::ContainsType::Check<T, Pred::template type, Filter::template type>::value;
 
@@ -108,6 +110,7 @@ namespace em::Refl
     // Uses `Meta::same_or_derived_from_and_cvref_convertible_to` internally.
     // The `Filter` predicate prevents recursion into the types for which it returns false. Also it overrides the `Pred` predicate:
     //   if `Filter` returns false, the `Pred` predicate isn't checked for this type.
+    // Note: This only checks non-static members!
     template <typename T, typename Elem, typename/*TypePredicate*/ Filter = Meta::true_predicate>
     concept TypeRecursivelyContainsElemCvref = TypeRecursivelyContainsPred<T, PredTypeMatchesElemCvref<Elem>, Filter>;
 

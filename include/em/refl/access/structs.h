@@ -12,6 +12,8 @@
 #include <type_traits>
 #include <utility>
 
+// This file lets you access both static and non-static members.
+
 namespace em::Refl::Structs
 {
     // Normally not useful, but if you used some of the lower-level maros from `em/refl/macros/structs.h` to inject custom member into the traits,
@@ -165,6 +167,8 @@ namespace em::Refl::Structs
     using StaticMemberTypeCvrefConst = decltype((GetStaticMemberConst<std::remove_cvref_t<T>, I>)());
     template <typename T, int I> requires ValidStaticMemberIndex<T, I>
     using StaticMemberTypeCvrefMutable = decltype((GetStaticMemberMutable<std::remove_cvref_t<T>, I>)());
+    template <typename T, int I, bool IsConst>
+    using StaticMemberTypeCvrefMaybeConst = std::conditional_t<IsConst, StaticMemberTypeCvrefConst<T, I>, StaticMemberTypeCvrefMutable<T, I>>;
 
 
     namespace detail

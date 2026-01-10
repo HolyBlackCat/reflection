@@ -13,7 +13,7 @@ namespace em::Refl
     {
         adjust,
         indirect,
-        structure,
+        structure, // The intent is that this is only used for non-static members. Static members should be checked in every type regardless of the classification.
         range,
         variant,
         unknown,
