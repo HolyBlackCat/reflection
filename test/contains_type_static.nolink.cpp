@@ -49,29 +49,29 @@ struct H
     )
 };
 
-static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<X &, X &> == false);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<X &, X &>);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<X &, X &, em::Refl::IterationFlags::ignore_root> == false);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<X &, X &>);
 
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<A &, X &, em::Refl::IterationFlags::ignore_root> == false);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<A &, X &> == false);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<A &, X &> == false);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<B &, X &, em::Refl::IterationFlags::ignore_root> == false);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<B &, X &> == false);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<B &, X &> == false);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<C &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<C &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<C &, X &>);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<D &, X &, em::Refl::IterationFlags::ignore_root> == false);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<D &, X &> == false);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<D &, X &> == false);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<E &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<E &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<E &, X &>);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<F &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<F &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<F &, X &>);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<G &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<G &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<G &, X &>);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<H &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<H &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<H &, X &>);
 
 
 // Constness is ignored, other than on the root element.
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<const X &, X &, em::Refl::IterationFlags::ignore_root> == false);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<const X &, X &> == false);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<const X &, X &> == false);
+static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<const C &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(em::Refl::TypeRecursivelyContainsStaticElemCvref<const C &, X &>);
-static_assert(em::Refl::TypeMatchesOrRecursivelyContainsStaticElemCvref<const C &, X &>);

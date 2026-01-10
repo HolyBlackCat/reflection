@@ -32,7 +32,7 @@ namespace
 
     template <typename T, typename Elem, em::Meta::TypePredicate Filter = em::Meta::true_predicate>
     constexpr bool contains_type = []{
-        constexpr bool a = em::Refl::TypeRecursivelyContainsElemCvref<T, Elem, Filter>;
+        constexpr bool a = em::Refl::TypeRecursivelyContainsElemCvref<T, Elem, {}, Filter>;
         constexpr bool b = (contains_type_using_visit<T, Filter>)(em::Meta::type_to_desc<Elem>);
         static_assert(a <= b);
         static_assert(a >= b);
@@ -201,3 +201,12 @@ static_assert(contains_type<F, int>);
 static_assert(contains_type<F, float>);
 static_assert(!contains_type<F, int, NotRange>);
 static_assert(contains_type<F, float, NotRange>);
+
+
+
+// --- The `ignore_root` flag.
+
+static_assert(em::Refl::TypeRecursivelyContainsElemCvref<int &, int &>);
+static_assert(!em::Refl::TypeRecursivelyContainsElemCvref<int &, int &, em::Refl::IterationFlags::ignore_root>);
+static_assert(em::Refl::TypeRecursivelyContainsElemCvref<std::vector<int> &, int &>);
+static_assert(em::Refl::TypeRecursivelyContainsElemCvref<std::vector<int> &, int &, em::Refl::IterationFlags::ignore_root>);

@@ -44,7 +44,7 @@ namespace em::Refl
 
         // Recursively apply `Check` to non-static members.
         template <typename T, template <typename> typename Pred, template <typename> typename Filter>
-        struct CheckNonStaticMembers : std::bool_constant<TypeRecursivelyContainsPred<T, detail::ContainsTypeStatic::CheckPred<Pred, Filter>, Meta::TraitToPredicate<Filter>>> {};
+        struct CheckNonStaticMembers : std::bool_constant<TypeRecursivelyContainsPred<T, detail::ContainsTypeStatic::CheckPred<Pred, Filter>, {}, Meta::TraitToPredicate<Filter>>> {};
 
         template <typename T, template <typename> typename Pred, template <typename> typename Filter>
         struct CheckStaticMemberOrRecurse : CheckNonStaticMembers<T, Pred, Filter> {};
@@ -66,13 +66,13 @@ namespace em::Refl
     // The `Filter` predicate prevents recursion into the types for which it returns false. Also it overrides the `Pred` predicate:
     //   if `Filter` returns false, the `Pred` predicate isn't checked for this type.
     // Note: This only checks static members, but recurses even into non-static members to find more static ones.
-    // Note: This assumes that the root element is non-static, so it will refuse to match that.
-    template <typename T, typename/*TypePredicate*/ Pred, typename/*TypePredicate*/ Filter = Meta::true_predicate>
-    concept TypeRecursivelyContainsStaticPred = detail::ContainsTypeStatic::CheckNonStaticMembers<T, Pred::template type, Filter::template type>::value;
-
-    // This version will also match the root element.
-    template <typename T, typename/*TypePredicate*/ Pred, typename/*TypePredicate*/ Filter = Meta::true_predicate>
-    concept TypeMatchesOrRecursivelyContainsStaticPred = (Filter::template type<T>::value && Pred::template type<T>::value) || TypeRecursivelyContainsStaticPred<T, Pred, Filter>;
+    // The only flag respected here is `ignore_root`.
+    template <typename T, typename/*TypePredicate*/ Pred, IterationFlags Flags = {}, typename/*TypePredicate*/ Filter = Meta::true_predicate>
+    concept TypeRecursivelyContainsStaticPred =
+        // Manually check the root element if not disabled.
+        (!bool(Flags & IterationFlags::ignore_root) && Filter::template type<T>::value && Pred::template type<T>::value) ||
+        // Recurse.
+        detail::ContainsTypeStatic::CheckNonStaticMembers<T, Pred::template type, Filter::template type>::value;
 
 
     // Checks if the type `T` contains an element of a type convertible to `Elem` somewhere in it. (`Elem` is usually a reference.)
@@ -81,32 +81,18 @@ namespace em::Refl
     // The `Filter` predicate prevents recursion into the types for which it returns false. Also it overrides the `Pred` predicate:
     //   if `Filter` returns false, the `Pred` predicate isn't checked for this type.
     // Note: This only checks static members, but recurses even into non-static members to find more static ones.
-    // Note: This assumes that the root element is non-static, so it will refuse to match that.
-    template <typename T, typename Elem, typename/*TypePredicate*/ Filter = Meta::true_predicate>
-    concept TypeRecursivelyContainsStaticElemCvref = TypeRecursivelyContainsStaticPred<T, PredTypeMatchesElemCvref<Elem>, Filter>;
-
-    // This version will also match the root element.
-    template <typename T, typename Elem, typename/*TypePredicate*/ Filter = Meta::true_predicate>
-    concept TypeMatchesOrRecursivelyContainsStaticElemCvref = TypeMatchesOrRecursivelyContainsStaticPred<T, PredTypeMatchesElemCvref<Elem>, Filter>;
+    // The only flag respected here is `ignore_root`.
+    template <typename T, typename Elem, IterationFlags Flags = {}, typename/*TypePredicate*/ Filter = Meta::true_predicate>
+    concept TypeRecursivelyContainsStaticElemCvref = TypeRecursivelyContainsStaticPred<T, PredTypeMatchesElemCvref<Elem>, Flags, Filter>;
 
 
     // This is a predicate version of `TypeRecursivelyContainsStaticPred`. It makes no sense to pass this to `PredTypeMatchesElemCvref`,
     //   because that has its own recursion, but we need this in other places.
-    template <Meta::TypePredicate Pred>
-    struct PredTypeRecursivelyContainsStaticPred {template <typename T> using type = std::bool_constant<TypeRecursivelyContainsStaticPred<T, Pred>>;};
-
-    // This is a predicate version of `TypeMatchesOrRecursivelyContainsStaticPred`. It makes no sense to pass this to `PredTypeMatchesElemCvref`,
-    //   because that has its own recursion, but we need this in other places.
-    template <Meta::TypePredicate Pred>
-    struct PredTypeMatchesOrRecursivelyContainsStaticPred {template <typename T> using type = std::bool_constant<TypeMatchesOrRecursivelyContainsStaticPred<T, Pred>>;};
+    template <Meta::TypePredicate Pred, IterationFlags Flags = {}, Meta::TypePredicate Filter = Meta::true_predicate>
+    struct PredTypeRecursivelyContainsStaticPred {template <typename T> using type = std::bool_constant<TypeRecursivelyContainsStaticPred<T, Pred, Flags, Filter>>;};
 
     // This is a predicate version of `TypeRecursivelyContainsStaticElemCvref`. It makes no sense to pass this to `PredTypeMatchesElemCvref`,
     //   because that has its own recursion, but we need this in other places.
-    template <typename Elem>
-    struct PredTypeRecursivelyContainsStaticElemCvref {template <typename T> using type = std::bool_constant<TypeRecursivelyContainsStaticElemCvref<T, Elem>>;};
-
-    // This is a predicate version of `TypeMatchesOrRecursivelyContainsStaticElemCvref`. It makes no sense to pass this to `PredTypeMatchesElemCvref`,
-    //   because that has its own recursion, but we need this in other places.
-    template <typename Elem>
-    struct PredTypeMatchesOrRecursivelyContainsStaticElemCvref {template <typename T> using type = std::bool_constant<TypeMatchesOrRecursivelyContainsStaticElemCvref<T, Elem>>;};
+    template <typename Elem, IterationFlags Flags = {}, Meta::TypePredicate Filter = Meta::true_predicate>
+    struct PredTypeRecursivelyContainsStaticElemCvref {template <typename T> using type = std::bool_constant<TypeRecursivelyContainsStaticElemCvref<T, Elem, Flags, Filter>>;};
 }
