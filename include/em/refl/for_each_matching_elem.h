@@ -15,7 +15,7 @@ namespace em::Refl
     // This can be false if `LoopBackend` wants backward iteration and there's a range somewhere in `T` that doesn't support it,
     //   AND this range recursively contains a type that matches `Pred` (because otherwise we don't need to iterate over it).
     template <typename T, typename/*TypePredicate*/ Pred, typename LoopBackend, IterationFlags Flags>
-    concept RecursivelyIterableInThisDirectionForPred = !LoopBackend::is_reverse || bool(Flags & IterationFlags::fallback_to_not_reverse) || RecursivelyBackwardIterable<T, Pred>;
+    concept RecursivelyIterableInThisDirectionForPred = !LoopBackend::is_reverse || bool(Flags & IterationFlags::fallback_to_not_reverse) || RecursivelyBackwardIterable<T, Flags, Pred>;
 
     // Whether we can recursively iterate over `T` in the direction specified by `LoopBackend`, in search for objects matching `Elem` (`Elem` normally is a reference).
     // This can be false if `LoopBackend` wants backward iteration and there's a range somewhere in `T` that doesn't support it,

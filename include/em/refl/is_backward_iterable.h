@@ -1,7 +1,6 @@
 #pragma once
 
-#include "em/meta/common.h"
-#include "em/refl/classify.h"
+#include "em/refl/common.h"
 #include "em/refl/contains_type.h"
 
 namespace em::Refl
@@ -17,6 +16,6 @@ namespace em::Refl
 
     // Checks all members recursively in `T`, returns false if any of them is a range that can't be iterated backwards.
     // Doesn't recurse into types for which `Filter` returns false, and ignores them completely even if they aren't backward-iterable.
-    template <typename T, typename/*TypePredicate*/ Filter = Meta::true_predicate>
-    concept RecursivelyBackwardIterable = !TypeRecursivelyContainsPred<T, detail::IsBackwardIterable::NonBackwardIterableRange, Filter>;
+    template <typename T, IterationFlags Flags = {}, typename/*TypePredicate*/ Filter = Meta::true_predicate>
+    concept RecursivelyBackwardIterable = !TypeRecursivelyContainsPred<T, detail::IsBackwardIterable::NonBackwardIterableRange, Flags, Filter>;
 }

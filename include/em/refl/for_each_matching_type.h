@@ -10,7 +10,7 @@
 
 namespace em::Refl
 {
-    // Recursively tries to find all types matching `Pred` in `T` (as if by `TypeRecursivelyContainsPred`). If `T` is a non-reference, adds `&&` automatically.
+    // Recursively tries to find all types of non-static members matching `Pred` in `T` (as if by `TypeRecursivelyContainsPred`). If `T` is a non-reference, adds `&&` automatically.
     // Calls `func<Type>()` on every matching element. The `Type` argument is always a reference.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename F>

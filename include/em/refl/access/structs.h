@@ -86,6 +86,7 @@ namespace em::Refl::Structs
 
     // The number of static data members in a struct.
     // Unlike `num_members`, this is valid for all types, and just returns 0 if there are no static members in it.
+    // This ignores cvref. (Same as `num_members`. Stating this explicitly, since there's no concept here to make this clear.)
     template <typename T>
     constexpr int num_static_members = detail::NumStaticMember<T>::value;
 
