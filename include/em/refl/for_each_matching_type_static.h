@@ -1,7 +1,6 @@
 #pragma once
 
 #include "em/macros/platform/compiler.h"
-#include "em/macros/utils/forward.h"
 #include "em/meta/const_for.h"
 #include "em/refl/common.h"
 #include "em/refl/contains_type_static.h"
@@ -41,13 +40,13 @@ namespace em::Refl
             },
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
-                return (ForEachTypeMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::ignore_root>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
+                return (ForEachTypeMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred2, Flags | IterationFlags::ignore_root>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
                     [&]<typename SubT>() -> decltype(auto)
                     {
-                        return (VisitTypesStatic<SubT, LoopBackend>)(
+                        return (VisitStaticTypes<SubT, LoopBackend>)(
                             [&]<typename SubSubT> -> decltype(auto)
                             {
-                                return (ForEachStaticTypeMatchingPred<SubSubT, Pred, LoopBackend, Flags & ~IterationFlags::ignore_root>)(EM_FWD(func));
+                                return (ForEachStaticTypeMatchingPred<SubSubT, Pred2, LoopBackend, Flags & ~IterationFlags::ignore_root>)(func);
                             }
                         );
                     }

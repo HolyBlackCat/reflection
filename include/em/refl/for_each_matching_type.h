@@ -63,7 +63,7 @@ namespace em::Refl
                     {
                         static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? next_flags_base : next_flags;
 
-                        return (ForEachTypeMatchingPred<SubT, Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(func));
+                        return (ForEachTypeMatchingPred<SubT, Pred2, LoopBackend, cur_flags, Desc::mode>)(func);
                     });
                 }
                 else

@@ -2,28 +2,16 @@
 
 #include "em/macros/platform/compiler.h"
 #include "em/meta/const_for.h"
+#include "em/refl/common_iteration.h"
 #include "em/refl/common.h"
 #include "em/refl/contains_type.h"
-#include "em/refl/is_backward_iterable.h"
 #include "em/refl/visit_members.h"
 
 #include <concepts>
 
 namespace em::Refl
 {
-    // Whether we can recursively iterate over `T` in the direction specified by `LoopBackend`, in search for types matching `Pred`.
-    // This can be false if `LoopBackend` wants backward iteration and there's a range somewhere in `T` that doesn't support it,
-    //   AND this range recursively contains a type that matches `Pred` (because otherwise we don't need to iterate over it).
-    template <typename T, typename/*TypePredicate*/ Pred, typename LoopBackend, IterationFlags Flags>
-    concept RecursivelyIterableInThisDirectionForPred = !LoopBackend::is_reverse || bool(Flags & IterationFlags::fallback_to_not_reverse) || RecursivelyBackwardIterable<T, Flags, Pred>;
-
-    // Whether we can recursively iterate over `T` in the direction specified by `LoopBackend`, in search for objects matching `Elem` (`Elem` normally is a reference).
-    // This can be false if `LoopBackend` wants backward iteration and there's a range somewhere in `T` that doesn't support it,
-    //   AND this range recursively contains a type that matches `Pred` (because otherwise we don't need to iterate over it).
-    template <typename T, typename Elem, typename LoopBackend, IterationFlags Flags>
-    concept RecursivelyIterableInThisDirectionForTypeCvref = RecursivelyIterableInThisDirectionForPred<T, PredTypeRecursivelyContainsElemCvref<Elem>, LoopBackend, Flags>;
-
-    // Recursively tries to find all types matching `Pred` in `input` (as if by `TypeRecursivelyContainsPred`).
+    // Recursively tries to find all non-static element types matching `Pred` in `input` (as if by `TypeRecursivelyContainsPred`).
     // Calls `func(elem)` on every matching element.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
@@ -76,7 +64,7 @@ namespace em::Refl
                     {
                         static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? next_flags_base : next_flags;
 
-                        return (ForEachElemMatchingPred<Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(member), EM_FWD(func));
+                        return (ForEachElemMatchingPred<Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(member), func);
                     });
                 }
                 else
@@ -87,7 +75,7 @@ namespace em::Refl
         );
     }
 
-    // Recursively tries to find all instances of `Elem` in `input`, as if by `TypeRecursivelyContainsElemCvref`, so cvref on `Elem` matters,
+    // Recursively tries to find all non-static instances of `Elem` in `input`, as if by `TypeRecursivelyContainsElemCvref`, so cvref on `Elem` matters,
     //   and it should normally be a reference.
     // Calls `func(elem)` on every matching element.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.

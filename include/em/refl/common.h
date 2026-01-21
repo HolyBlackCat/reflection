@@ -100,6 +100,8 @@ namespace em::Refl
     struct VisitingOther : BasicVisitingTag {VisitingOther() = default;};
 
 
+    // --- Misc:
+
     namespace detail
     {
         // Use this with `em::Meta::DetectBases`.

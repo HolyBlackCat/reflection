@@ -10,7 +10,7 @@
 
 namespace em::Refl
 {
-    // Calls `func` on every member of `T`, non-recurisvely.
+    // Calls `func` on every non-static member of `T`, non-recurisvely.
     // `func` is `[]<VisitDesc Desc>(auto &&member)` (or you can add another template parameter for the `member` type).
     // `Desc` receives one of the `Visiting...` tags describing what this member is (defined in `em/refl/common.h`). For most type categories this is `VisitingOther`.
     // The return value of `func` is handled according to `LoopBackend`.
