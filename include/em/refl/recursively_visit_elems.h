@@ -17,7 +17,7 @@ namespace em::Refl
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
     template <Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
     requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
-    constexpr decltype(auto) ForEachElemMatchingPred(T &&input, F &&func)
+    constexpr decltype(auto) RecursivelyVisitElemsMatchingPred(T &&input, F &&func)
     {
         static constexpr bool is_new_instance = !(Mode == VisitMode::base_subobject && bool(Flags & IterationFlags::predicate_finds_bases));
 
@@ -58,13 +58,15 @@ namespace em::Refl
                 // Here `TypeRecursivelyContainsPred` doesn't respect `ignore_root` (returns a false positive),
                 //   but since the resulting iteration only traverses bases, it should be free.
                 // It's easier to do this than to patch `TypeRecursivelyContainsPred`.
+                //
+                // Note that this condition is not purely an optimization. Visiting unnecessary subtrees can fail to compile if we're looping backwards, and they are not backwards-iterable.
                 if constexpr (TypeRecursivelyContainsPred<T, Pred2>)
                 {
                     return (VisitMembers<LoopBackend, Flags, Mode>)(EM_FWD(input), [&]<VisitDesc Desc>(auto &&member) -> decltype(auto)
                     {
                         static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? next_flags_base : next_flags;
 
-                        return (ForEachElemMatchingPred<Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(member), func);
+                        return (RecursivelyVisitElemsMatchingPred<Pred2, LoopBackend, cur_flags, Desc::mode>)(EM_FWD(member), func);
                     });
                 }
                 else
@@ -83,8 +85,8 @@ namespace em::Refl
     // Note that the `IterationFlags::predicate_finds_bases` flag is always added automatically here.
     template <typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
     requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags>
-    constexpr decltype(auto) ForEachElemOfTypeCvref(T &&input, F &&func)
+    constexpr decltype(auto) RecursivelyVisitElemsOfTypeCvref(T &&input, F &&func)
     {
-        return (ForEachElemMatchingPred<PredTypeMatchesElemCvref<Elem>, LoopBackend, Flags | IterationFlags::predicate_finds_bases, Mode>)(EM_FWD(input), EM_FWD(func));
+        return (RecursivelyVisitElemsMatchingPred<PredTypeMatchesElemCvref<Elem>, LoopBackend, Flags | IterationFlags::predicate_finds_bases, Mode>)(EM_FWD(input), EM_FWD(func));
     }
 }

@@ -4,7 +4,7 @@
 #include "em/meta/const_for.h"
 #include "em/refl/common.h"
 #include "em/refl/contains_type_static.h"
-#include "em/refl/for_each_matching_type.h"
+#include "em/refl/recursively_visit_types.h"
 #include "em/refl/visit_types_static.h"
 
 namespace em::Refl
@@ -13,7 +13,7 @@ namespace em::Refl
     // Calls `func<Type>()` on every matching element. The `Type` argument is always a reference.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, Meta::Deduce..., typename F>
-    constexpr decltype(auto) ForEachStaticTypeMatchingPred(F &&func)
+    constexpr decltype(auto) RecursivelyVisitStaticTypesMatchingPred(F &&func)
     {
         return Meta::RunEachFunc<LoopBackend>(
             [&]<typename Pred2 = Pred> -> decltype(auto)
@@ -40,13 +40,13 @@ namespace em::Refl
             },
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
-                return (ForEachTypeMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred2, Flags | IterationFlags::ignore_root>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
+                return (RecursivelyVisitTypesMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred2, Flags | IterationFlags::ignore_root>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
                     [&]<typename SubT>() -> decltype(auto)
                     {
                         return (VisitStaticTypes<SubT, LoopBackend>)(
                             [&]<typename SubSubT> -> decltype(auto)
                             {
-                                return (ForEachStaticTypeMatchingPred<SubSubT, Pred2, LoopBackend, Flags & ~IterationFlags::ignore_root>)(func);
+                                return (RecursivelyVisitStaticTypesMatchingPred<SubSubT, Pred2, LoopBackend, Flags & ~IterationFlags::ignore_root>)(func);
                             }
                         );
                     }

@@ -1,14 +1,14 @@
 #include "em/refl/contains_type_static.h"
-#include "em/refl/for_each_matching_elem_static.h"
-#include "em/refl/for_each_matching_type_static.h"
+#include "em/refl/recursively_visit_elems_static.h"
+#include "em/refl/recursively_visit_types_static.h"
 #include "em/refl/macros/structs.h"
 
 namespace
 {
     template <typename T, typename Elem, em::Refl::IterationFlags Flags = {}>
-    constexpr bool ContainsTypeStaticUsingForEachType()
+    constexpr bool ContainsTypeStaticUsingRecursivelyVisitTypes()
     {
-        return (bool)em::Refl::ForEachStaticTypeMatchingPred<T, em::Refl::PredTypeMatchesElemCvref<Elem>, em::Meta::LoopAnyOf<>, Flags>(
+        return (bool)em::Refl::RecursivelyVisitStaticTypesMatchingPred<T, em::Refl::PredTypeMatchesElemCvref<Elem>, em::Meta::LoopAnyOf<>, Flags>(
             [&]<em::Meta::same_or_derived_from_and_cvref_convertible_to<Elem> U>()
             {
                 return true;
@@ -17,9 +17,9 @@ namespace
     }
 
     template <typename Elem, em::Refl::IterationFlags Flags = {}>
-    constexpr bool ContainsTypeStaticUsingForEachElem(auto &&value)
+    constexpr bool ContainsTypeStaticUsingRecursivelyVisitElems(auto &&value)
     {
-        return (bool)em::Refl::ForEachStaticElemOfTypeCvref<Elem, em::Meta::LoopAnyOf<>, Flags>(EM_FWD(value),
+        return (bool)em::Refl::RecursivelyVisitStaticElemsOfTypeCvref<Elem, em::Meta::LoopAnyOf<>, Flags>(EM_FWD(value),
             [&](em::Meta::same_or_derived_from_and_cvref_convertible_to<Elem> auto &&)
             {
                 return true;
@@ -31,9 +31,9 @@ namespace
     template <typename T, typename Elem, em::Refl::IterationFlags Flags = {}>
     constexpr bool contains_type_static = []{
         constexpr bool a = em::Refl::TypeRecursivelyContainsStaticElemCvref<T, Elem, Flags>;
-        constexpr bool b = ContainsTypeStaticUsingForEachType<T, Elem, Flags>();
+        constexpr bool b = ContainsTypeStaticUsingRecursivelyVisitTypes<T, Elem, Flags>();
         std::remove_reference_t<T> value{};
-        constexpr bool c = ContainsTypeStaticUsingForEachElem<Elem, Flags>(value);
+        constexpr bool c = ContainsTypeStaticUsingRecursivelyVisitElems<Elem, Flags>(value);
         static_assert(a <= b);
         static_assert(a >= b);
         static_assert(a <= c);

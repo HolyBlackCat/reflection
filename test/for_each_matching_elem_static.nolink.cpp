@@ -1,4 +1,4 @@
-#include "em/refl/for_each_matching_elem_static.h"
+#include "em/refl/recursively_visit_elems_static.h"
 #include "em/refl/macros/structs.h"
 
 struct X {};
@@ -51,5 +51,5 @@ struct H
 
 void foo()
 {
-    em::Refl::ForEachStaticElemOfTypeCvref<H, X &>([](X &) {});
+    em::Refl::RecursivelyVisitStaticElemsOfTypeCvref<H, X &>([](X &) {});
 }

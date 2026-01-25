@@ -1,4 +1,4 @@
-#include "em/refl/for_each_matching_elem.h"
+#include "em/refl/recursively_visit_elems.h"
 #include "em/refl/macros/structs.h"
 
 #include <forward_list>
@@ -13,7 +13,7 @@ EM_STRUCT(A)
 static_assert(!em::Meta::false_predicate::type<int>::value);
 
 template <typename T, typename Elem, typename LoopBackend, em::Refl::IterationFlags Flags = {}>
-concept CanIterate = requires(T &&t){em::Refl::ForEachElemOfTypeCvref<Elem, LoopBackend, Flags>(EM_FWD(t), [](Elem){});};
+concept CanIterate = requires(T &&t){em::Refl::RecursivelyVisitElemsOfTypeCvref<Elem, LoopBackend, Flags>(EM_FWD(t), [](Elem){});};
 
 static_assert(CanIterate<A, int, em::Meta::LoopSimple>);
 static_assert(CanIterate<A, float, em::Meta::LoopSimple>);

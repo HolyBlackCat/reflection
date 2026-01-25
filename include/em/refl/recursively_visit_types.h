@@ -14,7 +14,7 @@ namespace em::Refl
     // Calls `func<Type>()` on every matching element. The `Type` argument is always a reference.
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename F>
-    constexpr decltype(auto) ForEachTypeMatchingPred(F &&func)
+    constexpr decltype(auto) RecursivelyVisitTypesMatchingPred(F &&func)
     {
         static constexpr bool is_new_instance = !(Mode == VisitMode::base_subobject && bool(Flags & IterationFlags::predicate_finds_bases));
 
@@ -55,7 +55,8 @@ namespace em::Refl
                 // Here `TypeRecursivelyContainsPred` doesn't respect `ignore_root` (returns a false positive),
                 //   but since the resulting iteration only traverses bases, it should be free.
                 // It's easier to do this than to patch `TypeRecursivelyContainsPred`.
-                // Also we don't REALLY need to check the predicate here (compared to e.g. member iteration, since iterating over containers might not get optimized out),
+                // Also we don't REALLY need to check the predicate here (compared to e.g. member iteration, since iterating over containers might not get optimized out,
+                //   and also might not compile if iterating backwards, for some containers),
                 //   but I'm leaving it here to hopefully make things faster. Not sure if it makes sense.
                 if constexpr (TypeRecursivelyContainsPred<T, Pred2>)
                 {
@@ -63,7 +64,7 @@ namespace em::Refl
                     {
                         static constexpr IterationFlags cur_flags = std::derived_from<VisitingAnyBase, Desc> ? next_flags_base : next_flags;
 
-                        return (ForEachTypeMatchingPred<SubT, Pred2, LoopBackend, cur_flags, Desc::mode>)(func);
+                        return (RecursivelyVisitTypesMatchingPred<SubT, Pred2, LoopBackend, cur_flags, Desc::mode>)(func);
                     });
                 }
                 else
