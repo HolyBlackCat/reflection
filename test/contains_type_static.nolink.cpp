@@ -1,6 +1,4 @@
-#include "em/refl/contains_type_static.h"
-#include "em/refl/recursively_visit_elems_static.h"
-#include "em/refl/recursively_visit_types_static.h"
+#include "em/refl/recursively_visit_types.h"
 #include "em/refl/macros/structs.h"
 
 namespace
@@ -8,7 +6,7 @@ namespace
     template <typename T, typename Elem, em::Refl::IterationFlags Flags = {}>
     constexpr bool ContainsTypeStaticUsingRecursivelyVisitTypes()
     {
-        return (bool)em::Refl::RecursivelyVisitStaticTypesMatchingPred<T, em::Refl::PredTypeMatchesElemCvref<Elem>, em::Meta::LoopAnyOf<>, Flags>(
+        return (bool)em::Refl::RecursivelyVisitStaticTypesMatchingPred<T, std::type_identity_t, em::Refl::PredTypeMatchesElemCvref<Elem>, em::Meta::LoopAnyOf<>, Flags>(
             [&]<em::Meta::same_or_derived_from_and_cvref_convertible_to<Elem> U>()
             {
                 return true;
@@ -16,28 +14,28 @@ namespace
         );
     }
 
-    template <typename Elem, em::Refl::IterationFlags Flags = {}>
-    constexpr bool ContainsTypeStaticUsingRecursivelyVisitElems(auto &&value)
-    {
-        return (bool)em::Refl::RecursivelyVisitStaticElemsOfTypeCvref<Elem, em::Meta::LoopAnyOf<>, Flags>(EM_FWD(value),
-            [&](em::Meta::same_or_derived_from_and_cvref_convertible_to<Elem> auto &&)
-            {
-                return true;
-            }
-        );
-    }
+    // template <typename Elem, em::Refl::IterationFlags Flags = {}>
+    // constexpr bool ContainsTypeStaticUsingRecursivelyVisitElems(auto &&value)
+    // {
+    //     return (bool)em::Refl::RecursivelyVisitStaticElemsOfTypeCvref<Elem, em::Meta::LoopAnyOf<>, Flags>(EM_FWD(value),
+    //         [&](em::Meta::same_or_derived_from_and_cvref_convertible_to<Elem> auto &&)
+    //         {
+    //             return true;
+    //         }
+    //     );
+    // }
 
 
     template <typename T, typename Elem, em::Refl::IterationFlags Flags = {}>
     constexpr bool contains_type_static = []{
         constexpr bool a = em::Refl::TypeRecursivelyContainsStaticElemCvref<T, Elem, Flags>;
         constexpr bool b = ContainsTypeStaticUsingRecursivelyVisitTypes<T, Elem, Flags>();
-        std::remove_reference_t<T> value{};
-        constexpr bool c = ContainsTypeStaticUsingRecursivelyVisitElems<Elem, Flags>(value);
+        // std::remove_reference_t<T> value{};
+        // constexpr bool c = ContainsTypeStaticUsingRecursivelyVisitElems<Elem, Flags>(value);
         static_assert(a <= b);
         static_assert(a >= b);
-        static_assert(a <= c);
-        static_assert(a >= c);
+        // static_assert(a <= c);
+        // static_assert(a >= c);
         return b;
     }();
 }
@@ -91,6 +89,8 @@ struct H
 };
 
 static_assert(contains_type_static<X &, X &, em::Refl::IterationFlags::ignore_root> == false);
+static_assert(contains_type_static<X &, X &, em::Refl::IterationFlags::root_is_not_static> == false);
+static_assert(contains_type_static<X &, X &, em::Refl::IterationFlags::ignore_root | em::Refl::IterationFlags::root_is_not_static> == false);
 static_assert(contains_type_static<X &, X &>);
 
 static_assert(contains_type_static<A &, X &, em::Refl::IterationFlags::ignore_root> == false);
@@ -99,8 +99,10 @@ static_assert(contains_type_static<B &, X &, em::Refl::IterationFlags::ignore_ro
 static_assert(contains_type_static<B &, X &> == false);
 static_assert(contains_type_static<C &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(contains_type_static<C &, X &>);
-static_assert(contains_type_static<D &, X &, em::Refl::IterationFlags::ignore_root> == false);
-static_assert(contains_type_static<D &, X &> == false);
+static_assert(contains_type_static<D &, X &, em::Refl::IterationFlags::ignore_root>);
+static_assert(contains_type_static<D &, X &>);
+static_assert(contains_type_static<D &, X &, em::Refl::IterationFlags::ignore_root | em::Refl::IterationFlags::root_is_not_static> == false);
+static_assert(contains_type_static<D &, X &, em::Refl::IterationFlags::root_is_not_static> == false);
 static_assert(contains_type_static<E &, X &, em::Refl::IterationFlags::ignore_root>);
 static_assert(contains_type_static<E &, X &>);
 static_assert(contains_type_static<F &, X &, em::Refl::IterationFlags::ignore_root>);

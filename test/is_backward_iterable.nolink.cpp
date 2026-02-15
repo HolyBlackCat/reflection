@@ -1,5 +1,5 @@
-#include "em/refl/common_iteration.h"
 #include "em/refl/macros/structs.h"
+#include "em/refl/recursively_visit_elems.h"
 
 #include <forward_list>
 #include <vector>

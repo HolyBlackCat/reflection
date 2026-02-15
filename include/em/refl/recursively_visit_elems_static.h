@@ -1,8 +1,7 @@
 #pragma once
 
-#include "em/refl/common_iteration.h"
 #include "em/refl/common.h"
-#include "em/refl/contains_type_static.h"
+#include "em/refl/recursively_visit_elems.h"
 #include "em/refl/recursively_visit_types.h"
 #include "em/refl/visit_members_static.h"
 
@@ -17,24 +16,25 @@ namespace em::Refl
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.1
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
     // This version doesn't take a root object, so it will never call `func()` on the root object.
-    template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::ignore_root, Meta::Deduce..., typename F>
-    requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags> && (bool(Flags & IterationFlags::ignore_root))
+    // Ignores `ignore_root`, since this will never visit the root anyway.
+    template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::root_is_not_static, Meta::Deduce..., typename F>
+    requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags> && (bool(Flags & IterationFlags::root_is_not_static))
     constexpr decltype(auto) RecursivelyVisitStaticElemsMatchingPred(F &&func)
     {
-        return (RecursivelyVisitTypesMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::ignore_root>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
+        return (RecursivelyVisitTypesMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::root_is_not_static>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
             [&]<typename SubT>() -> decltype(auto)
             {
                 return (VisitStaticMembers<SubT, LoopBackend>)(
                     [&](auto &&member) -> decltype(auto)
                     {
-                        return (RecursivelyVisitStaticElemsMatchingPred<Pred, LoopBackend, Flags & ~IterationFlags::ignore_root>)(member, func);
+                        return (RecursivelyVisitStaticElemsMatchingPred<Pred, LoopBackend, Flags & ~IterationFlags::root_is_not_static>)(member, func);
                     }
                 );
             }
         );
     }
 
-    // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::ignore_root` is not used.
+    // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::root_is_not_static` is not used.
     template <Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend /*= Meta::LoopSimple*/, IterationFlags Flags /*={}*/, Meta::Deduce..., typename T, typename F>
     requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
     constexpr decltype(auto) RecursivelyVisitStaticElemsMatchingPred(T &&input, F &&func)
@@ -42,29 +42,12 @@ namespace em::Refl
         return Meta::RunEachFunc<LoopBackend>(
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
-                if (bool(Flags & IterationFlags::ignore_root))
-                {
-                    return Meta::NoElements<LoopBackend>();
-                }
-                else if constexpr (Pred2::template type<T &&>::value)
-                {
-                    // Work around Clang bug: https://github.com/llvm/llvm-project/issues/61426
-                    // Don't be confused by the ticket name, it apparently applies here.
-                    // This isn't fixed in trunk yet at the time of writing, so the version condition might need to be bumped.
-                    #if EM_IS_CLANG_VERSION(<= 21)
-                    if constexpr (!bool(Flags & IterationFlags::ignore_root))
-                    if constexpr (Pred::template type<T &&>::value) // Sic, stacking conditions.
-                    #endif
-                    return func(EM_FWD(input));
-                }
-                else
-                {
-                    return Meta::NoElements<LoopBackend>();
-                }
+                if (!bool(Flags & IterationFlags::root_is_not_static))
+                    return (RecursivelyVisitElemsMatchingPred<Pred2, LoopBackend, Flags>)(EM_FWD(input), func);
             },
             [&]<typename Pred2 = Pred> -> decltype(auto)
             {
-                return (RecursivelyVisitStaticElemsMatchingPred<T, Pred2, LoopBackend, Flags | IterationFlags::ignore_root>)(func);
+                return (RecursivelyVisitStaticElemsMatchingPred<T, Pred2, LoopBackend, Flags | IterationFlags::root_is_not_static>)(func);
             }
         );
     }
@@ -76,15 +59,15 @@ namespace em::Refl
     // If `LoopBackend` iterates in reverse, then uses post-order traversal, otherwise pre-order.
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
     // This version doesn't take a root object, so it will never call `func()` on the root object.
-    template <typename T, typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::ignore_root, Meta::Deduce..., typename F>
-    requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags> && (bool(Flags & IterationFlags::ignore_root))
+    template <typename T, typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::root_is_not_static, Meta::Deduce..., typename F>
+    requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags> && (bool(Flags & IterationFlags::root_is_not_static))
     constexpr decltype(auto) RecursivelyVisitStaticElemsOfTypeCvref(F &&func)
     {
         // Passing `predicate_finds_bases` has no effect here, but I'm still doing it for consistency with the non-static version.
         return (RecursivelyVisitStaticElemsMatchingPred<T, PredTypeMatchesElemCvref<Elem>, LoopBackend, Flags | IterationFlags::predicate_finds_bases>)(EM_FWD(func));
     }
 
-    // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::ignore_root` is not used.
+    // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::root_is_not_static` is not used.
     template <typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, Meta::Deduce..., typename T, typename F>
     requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags>
     constexpr decltype(auto) RecursivelyVisitStaticElemsOfTypeCvref(T &&input, F &&func)

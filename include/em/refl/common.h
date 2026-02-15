@@ -52,9 +52,13 @@ namespace em::Refl
         // Don't call the lambda on the top-level object even if it matches the predicate.
         ignore_root = 1 << 1,
 
+        // Used when visiting static members.
+        // Indicates that the root object isn't static, and therefore it and its non-static members shouldn't be visited.
+        root_is_not_static = 1 << 2,
+
         // The specified predicate automatically handles the bases.
         // This means that if the predicate returned true on the derived class, we shouldn't check it and call the lambda again for the bases.
-        predicate_finds_bases = 1 << 2,
+        predicate_finds_bases = 1 << 3,
 
         // ]
     };
