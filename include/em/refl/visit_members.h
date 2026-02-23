@@ -16,7 +16,6 @@ namespace em::Refl
     // The return value of `func` is handled according to `LoopBackend`.
     // NOTE: When visitng recursively, must pass `Desc::mode` as the mode to any recursive calls, instead of the default mode.
     template <Meta::LoopBackendType LoopBackend, IterationFlags Flags = {}, VisitMode Mode = VisitMode::normal, Meta::Deduce..., typename T, typename F>
-    requires (!LoopBackend::is_reverse) || (bool(Flags & IterationFlags::fallback_to_not_reverse)) || Ranges::BackwardIterableOrNonRange<T>
     [[nodiscard]] constexpr decltype(auto) VisitMembers(T &&object, F &&func)
     {
         constexpr Category c = classify_opt<T>;

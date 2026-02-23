@@ -1,7 +1,7 @@
-#include "em/refl/contains_type.h"
 #include "em/meta/cvref_extras.h"
+#include "em/meta/type_predicates.h"
 #include "em/refl/macros/structs.h"
-#include "em/refl/visit_types.h"
+#include "em/refl/recursively_visit_types.h"
 
 #include <memory>
 #include <vector>

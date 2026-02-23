@@ -109,6 +109,7 @@ namespace em::Refl
     concept TypeRecursivelyContainsPred = TypeRecursivelyContainsPredWithStrategy<T, RecursiveTypeVisitorNonStatic, Pred, Flags, Filter, Mode>;
 
     // Same, but for static types.
+    // By default also effectively checks the non-static `TypeRecursivelyContainsPred`, unless you pass `IterationFlags::root_is_not_static`.
     template <typename T, typename/*TypePredicate*/ Pred, IterationFlags Flags = {}, typename/*TypePredicate*/ Filter = Meta::true_predicate, VisitMode Mode = VisitMode::normal>
     concept TypeRecursivelyContainsStaticPred = TypeRecursivelyContainsPredWithStrategy<T, RecursiveTypeVisitorStatic, Pred, Flags, Filter, Mode>;
 

@@ -8,7 +8,6 @@
 namespace em::Refl
 {
     template <Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, Meta::Deduce..., typename T, typename F>
-    requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
     constexpr decltype(auto) RecursivelyVisitStaticElemsMatchingPred(T &&input, F &&func);
 
     // Recursively tries to find all static element types matching `Pred` in `input` (as if by `TypeRecursivelyContainsPred`).
@@ -18,15 +17,17 @@ namespace em::Refl
     // This version doesn't take a root object, so it will never call `func()` on the root object.
     // Ignores `ignore_root`, since this will never visit the root anyway.
     template <typename T, Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::root_is_not_static, Meta::Deduce..., typename F>
-    requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags> && (bool(Flags & IterationFlags::root_is_not_static))
     constexpr decltype(auto) RecursivelyVisitStaticElemsMatchingPred(F &&func)
     {
-        return (RecursivelyVisitTypesMatchingPred<T, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::root_is_not_static>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
+        // Not ignoring root, because in each type we'll only visit its elements, not the type itself, so we don't mind visiting the root type. This flag is only needed for the other overload (see below).
+        // Marking the root subtree as non-static (in each type), because we won't be actually iterating over the non-static members of the matches. We're only interested in their static members. I really hope this is correct.
+        return (RecursivelyVisitTypesMatchingPred<T, std::remove_cvref, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::root_is_not_static>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
             [&]<typename SubT>() -> decltype(auto)
             {
                 return (VisitStaticMembers<SubT, LoopBackend>)(
                     [&](auto &&member) -> decltype(auto)
                     {
+                        // Marking those subtrees as static, for obvious reasons.
                         return (RecursivelyVisitStaticElemsMatchingPred<Pred, LoopBackend, Flags & ~IterationFlags::root_is_not_static>)(member, func);
                     }
                 );
@@ -36,7 +37,6 @@ namespace em::Refl
 
     // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::root_is_not_static` is not used.
     template <Meta::TypePredicate Pred, Meta::LoopBackendType LoopBackend /*= Meta::LoopSimple*/, IterationFlags Flags /*={}*/, Meta::Deduce..., typename T, typename F>
-    requires RecursivelyIterableInThisDirectionForPred<T, Pred, LoopBackend, Flags>
     constexpr decltype(auto) RecursivelyVisitStaticElemsMatchingPred(T &&input, F &&func)
     {
         return Meta::RunEachFunc<LoopBackend>(
@@ -60,7 +60,6 @@ namespace em::Refl
     // Causes a SFINAE error if it finds a type matching `Pred` in a range that's not backward-iterable and `LoopBackend` wants backward iteration.
     // This version doesn't take a root object, so it will never call `func()` on the root object.
     template <typename T, typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = IterationFlags::root_is_not_static, Meta::Deduce..., typename F>
-    requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags> && (bool(Flags & IterationFlags::root_is_not_static))
     constexpr decltype(auto) RecursivelyVisitStaticElemsOfTypeCvref(F &&func)
     {
         // Passing `predicate_finds_bases` has no effect here, but I'm still doing it for consistency with the non-static version.
@@ -69,7 +68,6 @@ namespace em::Refl
 
     // This version can call `func()` on the root object if it matches the predicate and `IterationFlags::root_is_not_static` is not used.
     template <typename Elem, Meta::LoopBackendType LoopBackend = Meta::LoopSimple, IterationFlags Flags = {}, Meta::Deduce..., typename T, typename F>
-    requires RecursivelyIterableInThisDirectionForTypeCvref<T, Elem, LoopBackend, Flags>
     constexpr decltype(auto) RecursivelyVisitStaticElemsOfTypeCvref(T &&input, F &&func)
     {
         // Passing `predicate_finds_bases` has no effect here, but I'm still doing it for consistency with the non-static version.
