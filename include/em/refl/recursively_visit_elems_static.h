@@ -21,7 +21,7 @@ namespace em::Refl
     {
         // Not ignoring root, because in each type we'll only visit its elements, not the type itself, so we don't mind visiting the root type. This flag is only needed for the other overload (see below).
         // Marking the root subtree as non-static (in each type), because we won't be actually iterating over the non-static members of the matches. We're only interested in their static members. I really hope this is correct.
-        return (RecursivelyVisitTypesMatchingPred<T, std::remove_cvref, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::root_is_not_static>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
+        return (RecursivelyVisitTypesMatchingPred<T, Meta::RemoveConstAndForceLvalueRef, PredTypeRecursivelyContainsStaticPred<Pred, Flags | IterationFlags::root_is_not_static>, LoopBackend, Flags & ~IterationFlags::ignore_root>)(
             [&]<typename SubT>() -> decltype(auto)
             {
                 return (VisitStaticMembers<SubT, LoopBackend>)(
