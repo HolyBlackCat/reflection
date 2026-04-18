@@ -430,4 +430,4 @@ namespace em::Refl::Structs
         using ::em::Refl::Structs::detail::Macros::_adl_em_InheritanceHook; \
         _adl_em_InheritanceHook<_em_Self>((_em_Self *)nullptr);\
     } \
-    static constexpr ::std::integral_constant<void (*)(), _em_TriggerInheritanceHook> _em_TriggerInheritanceHookVar{};
+    [[maybe_unused]] static constexpr ::std::integral_constant<void (*)(), _em_TriggerInheritanceHook> _em_TriggerInheritanceHookVar{};
